@@ -60,6 +60,8 @@ body{
   padding:3px 10px;font-family:inherit;flex-shrink:0}
 .kt .akt[disabled]{opacity:.5}
 .leer{font-size:14.5px;color:var(--t3);padding:12px 0;text-align:center}
+.hinweis{font-size:14px;color:#8a5a08;background:#fff8ed;border:1px solid #fde3b0;
+  border-radius:9px;padding:9px 11px;line-height:1.45}
 
 /* ---- Erinnerungen -------------------------------------- */
 .er{display:flex;align-items:center;gap:12px;background:#fff;border-radius:12px;
@@ -180,7 +182,6 @@ body{
 .dp-e{font-size:14.5px;display:flex;justify-content:space-between;gap:10px}
 .dp-e b{font-weight:600;color:var(--t1)}
 .dp-e span{color:var(--t2);font-variant-numeric:tabular-nums}
-.dp-e.abw span{color:var(--gelb);font-weight:600}
 .dp-frei{font-size:13.5px;color:var(--tl)}
 .dp-heute{background:#f0f9fd;border:1px solid #cfe9f5;border-radius:11px;
   padding:11px 13px;margin-bottom:12px}
@@ -242,7 +243,7 @@ body{
 <div id="app"><div class="start"><h2>Enilive Station Venier</h2>
   <p>Wird geladen …</p></div></div>
 <script>
-/* Enilive Station Venier – mobile Ansicht 2.0.0
+/* Enilive Station Venier – mobile Ansicht 2.2.0
    ------------------------------------------------------------
    Erzeugt aus denselben Modulen wie das Dashboard. Nicht von Hand
    ändern: Änderungen gehören in src/ und werden mit bundle.py
@@ -1047,12 +1048,40 @@ const DP = (() => {
     return out;
   }
 
+  /**
+   * Abwesenheiten über ein ganzes Kalenderjahr.
+   *
+   * Urlaub und Krankenstand stehen im Betrieb nirgends – weder auf dem
+   * Dashboard noch am Telefon. Beim Planen braucht man sie trotzdem, und
+   * zwar nicht als Monatswert: Die Frage ist, wie viel im Jahr schon
+   * verbraucht ist. Deshalb hier über alle zwölf Monate.
+   *
+   * Gezählt werden nur Monate, die es wirklich gibt. `monat()` erfindet
+   * sonst leere Monate aus der Mitarbeiterliste des Vormonats.
+   */
+  function jahr(j) {
+    const out = {};
+    const nimm = n => (out[n] = out[n] || { name: n, urlaub: 0, krank: 0 });
+    for (let m = 1; m <= 12; m++) {
+      if (!exists(j, m)) continue;
+      const d = monat(j, m);
+      d.emps.forEach(nimm);
+      Object.keys(d.eintraege).forEach(k => {
+        const name = k.slice(0, k.lastIndexOf('|'));
+        const v = d.eintraege[k];
+        if (v === 'u') nimm(name).urlaub++;
+        else if (v === 'k') nimm(name).krank++;
+      });
+    }
+    return out;
+  }
+
   const monatsName = (m) => ['Januar','Februar','März','April','Mai','Juni','Juli',
     'August','September','Oktober','November','Dezember'][m - 1];
 
   return { NAMEN_TAG, parse, toStore, fromStore, fmt, fmtLang, stunden, monat, exists,
            speichern, setzen, empHinzu, empEntfernen, empAnzahl,
-           bloecke, summen, monatsName, key };
+           bloecke, summen, jahr, monatsName, key };
 })();
 
 /* ===== 46-protokoll.js ===== */
@@ -1089,21 +1118,42 @@ const PROT = (() => {
    * Eintrag schreiben. Gibt den Schlüssel zurück.
    * `wer` und `bezug` sind freiwillig.
    */
+  /* Zwei Einträge in derselben Millisekunde sind nicht selten – beim
+     Abhaken mehrerer Aufgaben kurz hintereinander etwa. Ohne Vorkehrung
+     entschiede dann der Zufall, welcher oben steht, und dieselbe Liste
+     sähe bei zwei Aufrufen verschieden aus. Deshalb rückt der Zeitpunkt
+     notfalls um eine Millisekunde vor: Die Reihenfolge des Geschehens
+     bleibt erhalten, die angezeigte Uhrzeit ändert sich dadurch nicht. */
+  let zuletzt = 0;
+
   function schreiben(art, was, wer, bezug) {
+    const ts = Math.max(Date.now(), zuletzt + 1);
+    zuletzt = ts;
     return STORE.add('log', {
       art: String(art || ''),
       was: String(was || ''),
-      ts: Date.now(),
+      ts: ts,
       wer: String(wer || ''),
       bezug: bezug || ''
     });
   }
 
-  /** Einträge, neueste zuerst. Wahlweise auf eine Art eingegrenzt. */
+  /**
+   * Einträge, neueste zuerst. Wahlweise auf eine Art eingegrenzt.
+   *
+   * Zwei Einträge können auf dieselbe Millisekunde fallen – beim Abhaken
+   * mehrerer Aufgaben kurz hintereinander passiert das durchaus. Dann
+   * entschied bisher der Zufall über die Reihenfolge, und dieselbe Liste
+   * sah bei zwei Aufrufen verschieden aus. Der Schlüssel bricht den
+   * Gleichstand: Er beginnt mit dem Zeitpunkt der Anlage, ist eindeutig
+   * und ändert sich nie.
+   */
   function alle(grenze, art) {
     let l = STORE.list('log');
     if (art) l = l.filter(x => x.art === art);
-    return l.sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, grenze || 300);
+    return l.sort((a, b) => (b.ts || 0) - (a.ts || 0) ||
+                            String(b._key).localeCompare(String(a._key)))
+            .slice(0, grenze || 300);
   }
 
   /** Welche Arten tatsächlich vorkommen – für die Filterleiste. */
@@ -1669,7 +1719,11 @@ const ERIN = (() => {
    ============================================================ */
 const DRIVE = (() => {
   const CID    = '175713023932-k95gnmm6g3hgkj1eqoqoag2moo3u552p.apps.googleusercontent.com';
-  const SCOPE  = 'https://www.googleapis.com/auth/drive.file';
+  /* Zwei Bereiche: Drive für die Daten, Tasks für die Notizliste.
+     Beide hängen an derselben Anmeldung – ein zweites Token wäre eine
+     zweite Stelle, an der die Verbindung abreißen kann. */
+  const SCOPE  = 'https://www.googleapis.com/auth/drive.file'
+               + ' https://www.googleapis.com/auth/tasks';
   const HINT   = 'mathias.venier84@gmail.com';
   const FOLDER = 'Enilive Dashboard';
   const DATA   = 'daten.json';
@@ -1866,12 +1920,181 @@ const DRIVE = (() => {
       return this;
     },
     istOnline() { return ready && !!token; },
+    /** Der Zugang, damit andere Module dieselbe Anmeldung nutzen. */
+    zugang() { return token; },
     zustand()   { return renewing ? 'connecting' : state; },
     grund()     { return grund; },
     neuVerbinden() { verbinden(false); },
     holen, schreiben,
     /** Bei jedem Zustandswechsel benachrichtigen (Anzeige neu aufbauen). */
     aufZustand(f) { hoerer.push(f); }
+  };
+})();
+
+/* ===== 42-notiz.js ===== */
+/* ============================================================
+   NOTIZEN – Liste „Dashboard“ in Google Tasks
+   ------------------------------------------------------------
+   Die privaten Notizen liegen NICHT mehr in Drive, sondern in
+   einer Google-Tasks-Liste. Der Grund ist die Anzeige am
+   Telefon: Google Tasks hat ein Widget für den Startbildschirm,
+   und dort steht die Liste dann ohne Umweg.
+
+   Bewusst nur EINE Quelle. Ein zweiter Bestand in Drive hieße,
+   dass jemand entscheiden muss, was gilt, wenn dieselbe Notiz
+   an beiden Stellen geändert oder an einer gelöscht wird –
+   genau die Sorte Logik, die beim Drive-Abgleich die meiste
+   Mühe gemacht hat. Hier gibt es sie nicht: Dashboard und
+   Telefon sind zwei Fenster auf dieselbe Liste.
+
+   Erledigt gilt als gelöscht. Abgehakte Einträge verschwinden
+   aus dem Widget und aus dem Dashboard; eine zweite Liste für
+   Erledigtes gibt es nicht.
+   ============================================================ */
+const NOTIZ = (() => {
+  const API   = 'https://tasks.googleapis.com/tasks/v1';
+  const LISTE = 'Dashboard';
+  const TAKT  = 60 * 1000;
+
+  let listId  = null;
+  let items   = [];            // [{ id, text }]
+  let geladen = false;         // war der Abruf schon einmal erfolgreich?
+  let laeuft  = false;
+  let fehler  = '';
+  let taktId  = null;
+  const wachen = [];
+
+  const sagen = () => wachen.forEach(f => { try { f(); } catch (_) {} });
+  const zugang = () => (typeof DRIVE !== 'undefined' && DRIVE.zugang) ? DRIVE.zugang() : null;
+
+  async function ruf(pfad, opts) {
+    const t = zugang();
+    if (!t) throw new Error('nicht angemeldet');
+    const o = Object.assign({ headers: {} }, opts || {});
+    o.headers = Object.assign({ Authorization: 'Bearer ' + t }, o.headers);
+    if (o.body) o.headers['Content-Type'] = 'application/json';
+    const r = await fetch(API + pfad, o);
+    if (r.status === 204) return null;
+    if (!r.ok) {
+      /* 403 heißt hier fast immer: Die Berechtigung für Tasks fehlt noch.
+         Das ist kein Netzfehler, sondern eine Einrichtungsfrage – und die
+         Meldung soll das sagen, statt „HTTP 403“ zu zeigen. */
+      if (r.status === 403) throw new Error('Keine Berechtigung für Google Tasks');
+      if (r.status === 401) throw new Error('Anmeldung abgelaufen');
+      throw new Error('HTTP ' + r.status);
+    }
+    return r.json();
+  }
+
+  /** Liste „Dashboard“ suchen; gibt es sie nicht, wird sie angelegt. */
+  async function listeFinden() {
+    if (listId) return listId;
+    const d = await ruf('/users/@me/lists?maxResults=100');
+    const treffer = (d.items || []).find(x => x.title === LISTE);
+    if (treffer) { listId = treffer.id; return listId; }
+    const neu = await ruf('/users/@me/lists', {
+      method: 'POST', body: JSON.stringify({ title: LISTE })
+    });
+    listId = neu.id;
+    return listId;
+  }
+
+  /**
+   * Offene Einträge holen. Erledigte kommen gar nicht erst mit –
+   * abgehakt ist für uns dasselbe wie gelöscht.
+   */
+  async function laden() {
+    if (laeuft) return false;
+    laeuft = true; sagen();
+    try {
+      const id = await listeFinden();
+      const d = await ruf('/lists/' + id + '/tasks?showCompleted=false&maxResults=100');
+      items = (d.items || [])
+        .filter(x => x.status !== 'completed')
+        .map(x => ({ id: x.id, text: x.title || '' }))
+        .filter(x => x.text.trim());
+      geladen = true; fehler = '';
+      return true;
+    } catch (e) {
+      fehler = String(e && e.message || e);
+      return false;
+    } finally {
+      laeuft = false; sagen();
+    }
+  }
+
+  async function neu(text) {
+    text = String(text || '').trim();
+    if (!text) return false;
+    try {
+      const id = await listeFinden();
+      const t = await ruf('/lists/' + id + '/tasks', {
+        method: 'POST', body: JSON.stringify({ title: text })
+      });
+      /* Sofort in die eigene Liste, nicht erst beim nächsten Abruf –
+         sonst leert sich das Eingabefeld und sonst passiert nichts.
+         Neueste oben, wie in der Bestellliste. */
+      items.unshift({ id: t.id, text: text });
+      fehler = ''; sagen();
+      return true;
+    } catch (e) {
+      fehler = String(e && e.message || e);
+      sagen();
+      return false;
+    }
+  }
+
+  async function weg(id) {
+    try {
+      const l = await listeFinden();
+      await ruf('/lists/' + l + '/tasks/' + id, { method: 'DELETE' });
+      items = items.filter(x => x.id !== id);
+      fehler = ''; sagen();
+      return true;
+    } catch (e) {
+      fehler = String(e && e.message || e);
+      sagen();
+      return false;
+    }
+  }
+
+  /**
+   * Einmalige Übernahme der Notizen aus Drive.
+   *
+   * Danach werden sie dort gelöscht – die Grabsteine sorgen dafür, dass sie
+   * auch auf den anderen Geräten verschwinden. Ohne das Löschen stünden sie
+   * doppelt da, sobald ein zweites Gerät noch die alte Fassung kennt.
+   */
+  async function uebernehmen() {
+    if (STORE.get('notiz_umgezogen')) return 0;
+    if (!geladen) return 0;
+    const alt = STORE.list('notiz').sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    let n = 0;
+    for (const x of alt) {
+      if (!x.text || !String(x.text).trim()) { STORE.del(x._key); continue; }
+      const ok = await neu(String(x.text).trim());
+      if (!ok) return n;                 // Abbruch: lieber später erneut
+      STORE.del(x._key);
+      n++;
+    }
+    STORE.put('notiz_umgezogen', new Date().toISOString());
+    return n;
+  }
+
+  return {
+    start() {
+      laden().then(() => uebernehmen());
+      clearInterval(taktId);
+      taktId = setInterval(() => { if (!document.hidden) laden(); }, TAKT);
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) laden(); });
+      return this;
+    },
+    laden, neu, weg, uebernehmen,
+    /** Offene Notizen, neueste zuerst. */
+    alle() { return items.slice(); },
+    /** Auskunft für die Anzeige: nie eine leere Liste vortäuschen. */
+    stand() { return { geladen: geladen, laeuft: laeuft, fehler: fehler }; },
+    aufAenderung(f) { wachen.push(f); }
   };
 })();
 
@@ -2263,10 +2486,14 @@ const APP = (() => {
     });
   }
 
+  /* Nur wer tatsächlich Dienst hat. Urlaub und Krankenstand haben einen
+     Eintrag, aber keine Stunden – sie beantworten die Frage „wer ist da?“
+     nicht und gehen niemanden etwas an, der aufs Telefon schaut. Zu sehen
+     sind sie ausschließlich im Verwaltungsbereich am Rechner. */
   function dienste(d) {
     const m = DP.monat(d.getFullYear(), d.getMonth() + 1);
     return m.emps.map(n => ({ n: n, v: m.eintraege[n + '|' + d.getDate()] || '' }))
-                 .filter(x => x.v);
+                 .filter(x => DP.stunden(x.v) > 0);
   }
 
   function seiteDienst() {
@@ -2284,7 +2511,7 @@ const APP = (() => {
         <div class="dp-d">${DS[dow(d)]} ${String(d.getDate()).padStart(2,'0')}.
           <small>${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getFullYear()).slice(2)}</small></div>
         <div class="dp-s">${l.length
-          ? l.map(x => `<div class="dp-e${(x.v === 'u' || x.v === 'k') ? ' abw' : ''}">
+          ? l.map(x => `<div class="dp-e">
               <b>${esc(x.n)}</b><span>${esc(DP.fmt(x.v))}</span></div>`).join('')
           : '<div class="dp-frei">keine Dienste</div>'}</div></div>`;
     }).join('');
@@ -2299,7 +2526,7 @@ const APP = (() => {
       <div class="dp-heute">
         <div class="kt">Heute im Dienst</div>
         ${heuteListe.length
-          ? heuteListe.map(x => `<div class="dp-e${(x.v === 'u' || x.v === 'k') ? ' abw' : ''}">
+          ? heuteListe.map(x => `<div class="dp-e">
               <b>${esc(x.n)}</b><span>${esc(DP.fmt(x.v))}</span></div>`).join('')
           : '<div class="dp-frei">keine Dienste eingetragen</div>'}
         ${jetzt ? `<div style="font-size:13px;color:var(--t3);margin-top:6px">gerade an der Kassa: ${esc(jetzt)}</div>` : ''}
@@ -2316,25 +2543,36 @@ const APP = (() => {
   }
 
   /* ---- Notizen ------------------------------------------- */
+  /* Dieselbe Google-Tasks-Liste „Dashboard“ wie am Rechner – und dieselbe
+     wie im Widget auf dem Startbildschirm. Kein Datum, keine Ordnung,
+     nur Zeilen. Wenn die Liste nicht geladen werden konnte, sagt die
+     Karte das: Eine leere Liste sähe aus wie „keine Notizen“. */
   function seiteNotiz() {
-    const l = STORE.list('notiz').sort((a, b) => (b.ts || 0) - (a.ts || 0));
+    const st = NOTIZ.stand();
+    const l = NOTIZ.alle();
+    let inhalt;
+    if (st.fehler && !st.geladen) {
+      inhalt = `<div class="hinweis">Notizliste nicht erreichbar – ${esc(st.fehler)}</div>`;
+    } else if (!st.geladen) {
+      inhalt = '<div class="leer">Notizen werden geladen …</div>';
+    } else if (!l.length) {
+      inhalt = '<div class="leer">Keine Notizen</div>';
+    } else {
+      inhalt = l.map(n => `<div class="z">
+        <div class="z-t">${esc(n.text)}</div>
+        <button class="z-x" onclick="APP.notizWeg('${esc(n.id)}')">×</button>
+      </div>`).join('');
+    }
     return `<div class="karte">
-      <div class="kt">Notizen<span class="neb">${l.length}</span></div>
-      ${l.length ? l.map(n => {
-        const d = n.ts ? new Date(n.ts) : null;
-        return `<div class="z">
-          <div class="z-t">${esc(n.text)}
-            <div class="z-n">${d ? esc(d.toLocaleDateString('de-AT',
-              { day:'2-digit', month:'2-digit', year:'2-digit' }) + ' · ' +
-              d.toLocaleTimeString('de-AT', { hour:'2-digit', minute:'2-digit' })) : ''}</div>
-          </div>
-          <button class="z-x" onclick="APP.notizWeg('${n._key}')">×</button>
-        </div>`; }).join('') : '<div class="leer">Keine Notizen</div>'}
+      <div class="kt">Notizen${(st.geladen && l.length) ? `<span class="neb">${l.length}</span>` : ''}</div>
+      ${inhalt}
       <div class="eing">
         <input id="nz-neu" placeholder="Notiz eingeben">
         <button onclick="APP.notizNeu()">+</button>
       </div>
-      <div class="ok-hinweis">${(Date.now() - notizOk < 3000) ? 'Notiz gespeichert' : ''}</div>
+      <div class="ok-hinweis">${
+        (st.fehler && st.geladen) ? esc(st.fehler)
+        : (Date.now() - notizOk < 3000) ? 'Notiz gespeichert' : ''}</div>
     </div>`;
   }
 
@@ -2446,7 +2684,8 @@ const APP = (() => {
       /* Keine Ersteinrichtung. Der Bestand kommt aus Drive; würde die
          mobile Seite selbst welchen anlegen, käme Gelöschtes zurück. */
       STORE.subscribe(bauen);
-      DRIVE.aufZustand(bauen);
+      DRIVE.aufZustand(z => { if (z === 'online') NOTIZ.start(); bauen(); });
+      NOTIZ.aufAenderung(bauen);
       MFEED.aufAenderung(bauen);
       DRIVE.init();
       MFEED.start();
@@ -2521,13 +2760,15 @@ const APP = (() => {
     notizNeu() {
       const el = document.getElementById('nz-neu');
       if (!el || !el.value.trim()) return;
-      STORE.add('notiz', { text: el.value.trim(), ts: Date.now() });
+      const text = el.value.trim();
       el.value = '';
       notizOk = Date.now();
-      bauen();
-      setTimeout(() => { notizOk = 0; bauen(); }, 3200);
+      NOTIZ.neu(text).then(() => {
+        bauen();
+        setTimeout(() => { notizOk = 0; bauen(); }, 3200);
+      });
     },
-    notizWeg(k) { if (confirm('Notiz entfernen?')) STORE.del(k); },
+    notizWeg(id) { if (confirm('Notiz entfernen?')) NOTIZ.weg(id); },
 
     /* Protokoll */
     protFilter(a) { protArt = a; bauen(); },
@@ -2537,6 +2778,7 @@ const APP = (() => {
          get MFEED() { return MFEED; }, get PRICE() { return PRICE; },
          get AUSW() { return AUSW; }, get ERIN() { return ERIN; },
          get TASKS() { return TASKS; }, get PROT() { return PROT; },
+         get NOTIZ() { return NOTIZ; },
          get DP() { return DP; },
          seite, bauen, planTage, wocheAb,
          get aktiv() { return aktiv; }, get planTag() { return planTag; } }
