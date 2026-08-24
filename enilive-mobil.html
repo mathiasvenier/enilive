@@ -41,6 +41,7 @@ body{
   justify-content:space-between;gap:10px}
 .kopf h1{font-size:17px;font-weight:700;color:#fff;letter-spacing:-.2px;line-height:1.25}
 .kopf .dat{font-size:13px;color:rgba(255,255,255,.85);font-weight:500;margin-top:3px}
+.kopf .ver{font-size:11px;opacity:.6;margin-left:7px;font-weight:600}
 .sync{font-size:12px;font-weight:600;padding:9px 13px;border-radius:20px;
   background:rgba(255,255,255,.2);color:#fff;border:none;font-family:inherit;
   white-space:nowrap;cursor:pointer;flex-shrink:0}
@@ -243,7 +244,7 @@ body{
 <div id="app"><div class="start"><h2>Enilive Station Venier</h2>
   <p>Wird geladen …</p></div></div>
 <script>
-/* Enilive Station Venier – mobile Ansicht 2.2.0
+/* Enilive Station Venier – mobile Ansicht 2.3.0
    ------------------------------------------------------------
    Erzeugt aus denselben Modulen wie das Dashboard. Nicht von Hand
    ändern: Änderungen gehören in src/ und werden mit bundle.py
@@ -1569,7 +1570,10 @@ const VIGN = (() => {
 const ERIN = (() => {
   const START = [
     ['Außenbeleuchtung eingeschaltet?', '19:30', 60],
-    ['Außenbeleuchtung ausgeschaltet?', '07:00', 60]
+    ['Außenbeleuchtung ausgeschaltet?', '07:00', 60],
+    /* Erscheint nur, wenn die fällige Fahne von der aufgehängten abweicht –
+       siehe `faellig()` weiter unten. */
+    ['Fahne im Außenbereich tauschen', '08:00', 120, 'fahne']
   ];
 
   /* Station geschlossen 21:00–06:00. Eine Erinnerung außerhalb dieser
@@ -1597,8 +1601,10 @@ const ERIN = (() => {
     START.forEach((e, i) => {
       const k = 'erin:start_' + i;
       if (!STORE.raw().items[k]) {
-        STORE.seed(k, { text: e[0], zeit: e[1], tage: [], frist: e[2],
-                        aktiv: true, pos: (i + 1) * 10 });
+        const v = { text: e[0], zeit: e[1], tage: [], frist: e[2],
+                    aktiv: true, pos: (i + 1) * 10 };
+        if (e[3]) v.wenn = e[3];
+        STORE.seed(k, v);
         n++;
       }
     });
@@ -1662,6 +1668,18 @@ const ERIN = (() => {
                       wer: String(wer || TASKS.diensthabend() || '') };
     STORE.put(quittKey(key, jetzt), eintrag);
     PROT.schreiben('erinnerung', e.text, eintrag.wer, key);
+    /* Beim Fahnentausch löst die Bestätigung die eigentliche Handlung aus:
+       Die fällige Fahne gilt ab jetzt als aufgehängt. Sonst käme dieselbe
+       Erinnerung am nächsten Tag wieder. */
+    if (e.wenn === 'fahne') {
+      try {
+        const soll = LOTT.fahneSoll(LOTT.stand());
+        if (soll) {
+          LOTT.gehaengt(soll);
+          PROT.schreiben('fahne', 'Fahne gewechselt: ' + soll.text, eintrag.wer, key);
+        }
+      } catch (_) {}
+    }
     return eintrag;
   }
 
@@ -1676,12 +1694,50 @@ const ERIN = (() => {
    * Was ist gerade offen? Liefert die fälligen, noch nicht bestätigten
    * Erinnerungen – überfällige zuerst.
    */
+  /**
+   * Nachträglich hinzugekommene Starterinnerungen ergänzen.
+   *
+   * `ersteinrichtung()` läuft nur einmal. Wer das Dashboard schon länger
+   * benutzt, bekäme eine später hinzugefügte Erinnerung sonst nie zu sehen.
+   * Der Grabstein-Schutz bleibt gewahrt: Wurde sie einmal gelöscht, kommt
+   * sie nicht zurück – `seed()` verliert gegen jede spätere Löschung.
+   */
+  function nachtragen() {
+    if (!STORE.has('erin_init')) return 0;      // Erstanlage erledigt das schon
+    let n = 0;
+    START.forEach((e, i) => {
+      const k = 'erin:start_' + i;
+      if (STORE.raw().items[k]) return;         // vorhanden oder gelöscht
+      const v = { text: e[0], zeit: e[1], tage: [], frist: e[2],
+                  aktiv: true, pos: (i + 1) * 10 };
+      if (e[3]) v.wenn = e[3];
+      STORE.seed(k, v);
+      n++;
+    });
+    return n;
+  }
+
+  /**
+   * Manche Erinnerungen sollen nur erscheinen, wenn es wirklich etwas zu tun
+   * gibt. Der Fahnentausch etwa: Nach jeder Ziehung ändert sich die Summe,
+   * aber selten die Fahne. Eine Erinnerung, die meistens umsonst kommt, wird
+   * bald wegbestätigt, ohne dass jemand hinsieht – dann ist sie wertlos.
+   *
+   * Trägt eine Erinnerung `wenn: 'fahne'`, wird sie nur angeboten, solange
+   * die fällige Fahne von der aufgehängten abweicht.
+   */
+  function faellig(e) {
+    if (e.wenn !== 'fahne') return true;
+    try { return !!LOTT.wechselFaellig(); } catch (_) { return false; }
+  }
+
   function offen(jetzt) {
     const d = jetzt || new Date();
     const nun = d.getHours() * 60 + d.getMinutes();
     return alle()
       .filter(e => e.aktiv !== false)
       .filter(e => amTag(e, d))
+      .filter(faellig)
       .map(e => {
         const ab = minuten(e.zeit);
         if (ab === null || nun < ab) return null;
@@ -1696,7 +1752,7 @@ const ERIN = (() => {
       .sort((a, b) => (b.ueberfaellig - a.ueberfaellig) || (b.seit - a.seit));
   }
 
-  return { START, ersteinrichtung, alle, neu, aendern, weg, schieben,
+  return { START, ersteinrichtung, nachtragen, alle, neu, aendern, weg, schieben, faellig,
            bestaetigen, bestaetigt, offen, amTag, minuten, alsZeit,
            imBetrieb, FRUEH, SPAET };
 })();
@@ -2210,6 +2266,12 @@ const MFEED = (() => {
    ist. Die Fachlogik kommt unverändert aus den Modulen des
    Dashboards; hier steht nur, wie sie am Telefon aussieht.
    ============================================================ */
+/* Die Version steht sichtbar unter dem Datum. Am Rechner gibt es sie seit
+   6.21.0; auf dem Telefon fehlte sie, und dann muss man raten, welche
+   Fassung gerade läuft – das ist bei der Fehlersuche schon einmal
+   passiert. */
+const VERSION = '2.3.0';
+
 const APP = (() => {
   const DS  = ['Mo','Di','Mi','Do','Fr','Sa','So'];
   const DSL = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'];
@@ -2249,7 +2311,8 @@ const APP = (() => {
       <div>
         <h1>Enilive Station Venier</h1>
         <div class="dat">${esc(new Date().toLocaleDateString('de-AT',
-          { weekday:'long', day:'2-digit', month:'long', year:'numeric' }))}</div>
+          { weekday:'long', day:'2-digit', month:'long', year:'numeric' }))}
+          <span class="ver">${esc(VERSION)}</span></div>
       </div>
       <button class="sync${z === 'offline' ? ' off' : ''}"
         onclick="APP.verbinden()">${txt}</button>
@@ -2512,7 +2575,7 @@ const APP = (() => {
           <small>${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getFullYear()).slice(2)}</small></div>
         <div class="dp-s">${l.length
           ? l.map(x => `<div class="dp-e">
-              <b>${esc(x.n)}</b><span>${esc(DP.fmt(x.v))}</span></div>`).join('')
+              <b>${esc(x.n)}</b><span>${esc(DP.fmtLang(x.v))}</span></div>`).join('')
           : '<div class="dp-frei">keine Dienste</div>'}</div></div>`;
     }).join('');
 
@@ -2527,7 +2590,7 @@ const APP = (() => {
         <div class="kt">Heute im Dienst</div>
         ${heuteListe.length
           ? heuteListe.map(x => `<div class="dp-e">
-              <b>${esc(x.n)}</b><span>${esc(DP.fmt(x.v))}</span></div>`).join('')
+              <b>${esc(x.n)}</b><span>${esc(DP.fmtLang(x.v))}</span></div>`).join('')
           : '<div class="dp-frei">keine Dienste eingetragen</div>'}
         ${jetzt ? `<div style="font-size:13px;color:var(--t3);margin-top:6px">gerade an der Kassa: ${esc(jetzt)}</div>` : ''}
       </div>
