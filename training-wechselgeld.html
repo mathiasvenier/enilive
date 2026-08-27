@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Wechselgeld">
+<title>Wechselgeld herausgeben – Training</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap">
+<style>
+/* ============================================================
+   Wechselgeld herausgeben – Übung
+   ------------------------------------------------------------
+   Die Methode ist vorgegeben und nicht verhandelbar: Vom
+   Rechnungsbetrag AUFWÄRTS zählen bis zum gegebenen Betrag, in
+   aufsteigender Stückelung. Kein Rechnen, keine Anzeige eines
+   Restbetrags – wer den Rest sieht, rechnet wieder.
+
+   Die Lade ist maßstäblich nach dem Foto der echten Lade
+   nachgebaut. Entscheidend ist die POSITION der Fächer: Der
+   Griff soll sich einprägen, damit er später an der Kassa
+   sitzt.
+   ============================================================ */
+:root{
+  --hg:#0e1116; --karte:#171b21; --kante:#272d35;
+  --t:#e9eef3; --t2:#9aa6b2; --t3:#6b7684;
+  --gruen:#3ecf6d; --rot:#ff6b6b; --gelb:#ffcc4d; --blau:#4aa8e0;
+  --kupfer:#b06a3b; --kupfer2:#8c4f28;
+  --gold:#d8a72a; --gold2:#a87a12; --silber:#c9ced4;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'Montserrat',system-ui,sans-serif;background:var(--hg);color:var(--t);
+  min-height:100vh;padding:14px;display:flex;flex-direction:column;align-items:center;
+  gap:12px;user-select:none;-webkit-user-select:none}
+
+.oben{width:min(100%,1180px);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+h1{font-size:17px;font-weight:800;letter-spacing:-.2px;margin-right:auto}
+h1 small{display:block;font-size:11.5px;font-weight:600;color:var(--t3);letter-spacing:.3px}
+.stufen{display:flex;gap:5px;flex-wrap:wrap}
+.stufen button{background:#1d232b;border:1px solid var(--kante);color:var(--t2);
+  border-radius:20px;padding:7px 13px;font:700 12.5px 'Montserrat',sans-serif;cursor:pointer}
+.stufen button.an{background:var(--blau);border-color:var(--blau);color:#08131c}
+.punkte{display:flex;gap:14px;align-items:center;background:#1d232b;border:1px solid var(--kante);
+  border-radius:12px;padding:7px 14px}
+.punkte b{font-size:19px;font-weight:800}
+.punkte span{font-size:10.5px;color:var(--t3);font-weight:700;letter-spacing:.6px;
+  text-transform:uppercase;display:block}
+.serie{color:var(--gelb)}
+
+/* ---- Kundendisplay: zweizeiliges Punktraster wie an der Kassa ---- */
+.anzeige{width:min(100%,1180px);display:flex;gap:12px;align-items:stretch;flex-wrap:wrap}
+.display{flex:1;min-width:280px;background:#05070a;border:3px solid #23272c;border-radius:9px;
+  padding:14px 18px;box-shadow:inset 0 0 26px rgba(120,170,255,.09)}
+.display .z{font-family:'Courier New',monospace;font-size:clamp(15px,2.4vw,25px);
+  font-weight:700;color:#dce9ff;letter-spacing:1.5px;line-height:1.5;
+  text-shadow:0 0 9px rgba(150,190,255,.5);display:flex;justify-content:space-between;gap:12px}
+.display .z b{font-weight:700}
+
+/* ---- Zählstand: das Einzige, was mitläuft ---- */
+.stand{flex:0 0 300px;background:var(--karte);border:1px solid var(--kante);border-radius:12px;
+  padding:12px 16px;display:flex;flex-direction:column;justify-content:center}
+.stand .lbl{font-size:10.5px;font-weight:700;color:var(--t3);letter-spacing:.9px;
+  text-transform:uppercase}
+.stand .wert{font-size:clamp(30px,5vw,46px);font-weight:800;letter-spacing:-1.5px;
+  font-variant-numeric:tabular-nums;line-height:1.1}
+.stand.fertig .wert{color:var(--gruen)}
+
+/* ---- Genommene Stücke ---- */
+.weg-reihe{width:min(100%,1180px);display:flex;gap:8px;align-items:stretch}
+.knopf.klein{padding:0 18px;font-size:14px;white-space:nowrap}
+.weg{flex:1;min-width:0;min-height:44px;display:flex;gap:6px;align-items:center;
+  flex-wrap:wrap;background:var(--karte);border:1px solid var(--kante);border-radius:12px;
+  padding:8px 12px}
+.weg .leer{font-size:12.5px;color:var(--t3)}
+.weg .st{display:flex;align-items:center;gap:5px;background:#212832;border-radius:20px;
+  padding:4px 11px 4px 5px;font-size:13px;font-weight:700}
+.weg .st i{width:16px;height:16px;border-radius:50%;display:block;font-style:normal}
+.weg .st i.k{background:var(--kupfer)} .weg .st i.g{background:var(--gold)}
+.weg .st i.b{background:var(--silber);border:2px solid var(--gold)}
+.weg .st i.b2{background:var(--gold);border:2px solid var(--silber)}
+.weg .st i.s{border-radius:3px;width:22px;height:13px}
+
+/* ---- Lade ---- */
+.lade{position:relative;width:min(100%,1180px);aspect-ratio:2660/1010;
+  background:linear-gradient(180deg,#23262a 0%,#171a1d 100%);
+  border-radius:10px;border:2px solid #35393e;
+  box-shadow:0 10px 30px rgba(0,0,0,.5) inset, 0 6px 18px rgba(0,0,0,.4)}
+.f{position:absolute;background:#111418;border:1.5px solid #3a4046;border-radius:6px;
+  overflow:hidden;cursor:pointer;transition:border-color .12s, transform .06s;
+  box-shadow:inset 0 6px 14px rgba(0,0,0,.75)}
+.f:hover{border-color:#5b6672}
+.f:active{transform:scale(.985)}
+.f.falsch{animation:wackeln .32s}
+@keyframes wackeln{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}
+  75%{transform:translateX(6px)}}
+.f.falsch{border-color:var(--rot);box-shadow:inset 0 0 22px rgba(255,80,80,.35)}
+.f.gut{border-color:var(--gruen);box-shadow:inset 0 0 22px rgba(60,220,120,.3)}
+
+.streu{position:absolute;inset:0}
+.streu .m{position:absolute;border-radius:50%}
+.m.k{background:radial-gradient(circle at 34% 30%,#d08a55,var(--kupfer) 55%,var(--kupfer2))}
+.m.g{background:radial-gradient(circle at 34% 30%,#f0cf6a,var(--gold) 55%,var(--gold2))}
+.m.b{background:radial-gradient(circle at 34% 30%,#eee,var(--silber) 52%,#9aa1a8);
+  border:2px solid var(--gold)}
+.m.b2{background:radial-gradient(circle at 34% 30%,#f0cf6a,var(--gold) 55%,var(--gold2));
+  border:2px solid var(--silber)}
+
+.gross{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);flex:none;
+  white-space:nowrap;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  flex-direction:column;line-height:1;box-shadow:0 3px 8px rgba(0,0,0,.55);font-weight:800;
+  letter-spacing:-.5px;pointer-events:none}
+.gross .zahl{font-size:1.35em}
+.gross .einh{font-size:.6em;font-weight:700;opacity:.85;margin-top:1px}
+.gross.k{background:radial-gradient(circle at 33% 28%,#e2a06a,#b06a3b 58%,#8c4f28);
+  color:#4a2412;border:2px solid rgba(255,255,255,.18)}
+.gross.g{background:radial-gradient(circle at 33% 28%,#f6dd85,#d8a72a 58%,#a87a12);
+  color:#5a4208;border:2px solid rgba(255,255,255,.18)}
+.gross.b{background:radial-gradient(circle at 33% 28%,#f2f4f6,#c9ced4 55%,#98a0a8);
+  color:#2c3338;border:7px solid #d8a72a}
+.gross.b2{background:radial-gradient(circle at 33% 28%,#f6dd85,#d8a72a 58%,#a87a12);
+  color:#5a4208;border:7px solid #c9ced4}
+
+.schein{position:absolute;inset:6px;border-radius:5px;overflow:hidden;
+  pointer-events:none;display:flex;align-items:center;
+  box-shadow:0 3px 9px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.3)}
+/* Kein Abbild einer echten Banknote – die Wiedergabe von Geldscheinen ist
+   geregelt. Stattdessen die Merkmale, an denen man sie erkennt: Farbe,
+   Wert, Sternenkranz, Torbogen, Hologrammstreifen. */
+.schein .zahl{position:relative;z-index:3;font-size:clamp(16px,3vw,40px);font-weight:800;
+  letter-spacing:-1.5px;color:rgba(0,0,0,.7);text-shadow:0 1px 0 rgba(255,255,255,.4);
+  margin-left:5%}
+.schein .eur{position:relative;z-index:3;font-size:clamp(7px,1.1vw,13px);font-weight:800;
+  color:rgba(0,0,0,.5);letter-spacing:1px;margin-left:8px;align-self:flex-start;
+  margin-top:8%}
+/* Torbogen in der Mitte */
+.schein .tor{position:absolute;left:34%;top:16%;width:15%;height:68%;z-index:2;
+  border:2.5px solid rgba(255,255,255,.5);border-radius:50% 50% 3px 3px;
+  background:linear-gradient(180deg,rgba(255,255,255,.28),rgba(255,255,255,.06))}
+.schein .tor::after{content:'';position:absolute;left:50%;top:38%;width:34%;height:62%;
+  transform:translateX(-50%);background:rgba(0,0,0,.14);border-radius:3px 3px 0 0}
+/* Brücke rechts */
+.schein .bruecke{position:absolute;right:16%;bottom:22%;width:24%;height:34%;z-index:2;
+  border:2.5px solid rgba(255,255,255,.42);border-bottom:none;
+  border-radius:50% 50% 0 0 / 100% 100% 0 0}
+/* Sternenkranz */
+.schein .sterne{position:absolute;right:6%;top:12%;width:16%;aspect-ratio:1;z-index:2}
+.schein .sterne i{position:absolute;width:11%;aspect-ratio:1;background:rgba(255,255,255,.75);
+  clip-path:polygon(50% 0,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%)}
+/* Hologrammstreifen links */
+.schein .holo{position:absolute;left:0;top:0;bottom:0;width:11%;z-index:2;
+  background:linear-gradient(120deg,rgba(255,255,255,.5),rgba(255,255,255,.12) 45%,
+    rgba(255,255,255,.45));border-right:1px solid rgba(255,255,255,.3)}
+.s5{background:linear-gradient(150deg,#d6dbe0,#9aa2aa 55%,#c3c9cf)}
+.s10{background:linear-gradient(150deg,#f2988c,#c85a4e 55%,#e8877a)}
+.s20{background:linear-gradient(150deg,#8ec8ef,#3d84bd 55%,#79bde9)}
+.s50{background:linear-gradient(150deg,#f5c076,#c9821f 55%,#f0b45f)}
+.s100{background:linear-gradient(150deg,#9edcab,#43955c 55%,#8fd39d)}
+
+/* Trinkgeld: Münzen hochkant, gemischt – kein Wort nötig */
+.kante-m{position:absolute;border-radius:36%/50%;box-shadow:0 1px 2px rgba(0,0,0,.6)}
+
+/* ---- Fußzeile ---- */
+.unten{width:min(100%,1180px);display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.knopf{border:none;border-radius:12px;padding:15px 26px;font:800 17px 'Montserrat',sans-serif;
+  cursor:pointer}
+.knopf.gruen{background:var(--gruen);color:#062915}
+.knopf.grau{background:#242b34;color:var(--t2)}
+.knopf.blau{background:var(--blau);color:#08131c}
+.knopf[disabled]{opacity:.4;cursor:default}
+.melde{flex:1;min-width:220px;font-size:15px;font-weight:600;min-height:24px;line-height:1.35}
+.melde.gut{color:var(--gruen)} .melde.schlecht{color:var(--rot)}
+.ton{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--t2);font-weight:600}
+.ton input{width:18px;height:18px}
+
+/* ---- Auswertung ---- */
+/* Ein Geldstück, das zum Zählstand fliegt: Ohne diese Rückmeldung
+   passiert in der Lade beim Antippen nichts Sichtbares, und man weiß
+   nicht, ob der Griff angekommen ist. */
+.flug{position:fixed;z-index:60;pointer-events:none;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;flex-direction:column;
+  font-weight:800;line-height:1;box-shadow:0 6px 18px rgba(0,0,0,.6);
+  transition:transform .5s cubic-bezier(.35,.9,.4,1), opacity .5s}
+.flug.schein{border-radius:4px}
+.flug .z{font-size:1.3em} .flug .e{font-size:.55em;opacity:.85}
+
+.ov{position:fixed;inset:0;background:rgba(5,8,12,.86);display:none;align-items:center;
+  justify-content:center;padding:20px;z-index:50}
+.ov.auf{display:flex}
+.box{background:var(--karte);border:1px solid var(--kante);border-radius:18px;padding:26px 28px;
+  max-width:560px;width:100%;text-align:center}
+.box .em{font-size:56px;line-height:1}
+.box h2{font-size:24px;font-weight:800;margin:8px 0 4px}
+.box p{font-size:15px;color:var(--t2);line-height:1.55;margin-bottom:8px}
+.box .weg2{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:14px 0 18px}
+.sterne{font-size:26px;letter-spacing:4px;margin:6px 0}
+</style></head>
+<body>
+
+<div class="oben">
+  <h1>Wechselgeld herausgeben<small>Vom Rechnungsbetrag aufwärts zählen</small></h1>
+  <div class="stufen" id="stufen"></div>
+  <div class="punkte">
+    <div><span>Punkte</span><b id="p-punkte">0</b></div>
+    <div><span>Serie</span><b class="serie" id="p-serie">0</b></div>
+  </div>
+</div>
+
+<div class="anzeige">
+  <div class="display">
+    <div class="z"><span>ZU ZAHLEN</span><b id="d-summe">0,00</b></div>
+    <div class="z"><span>GEGEBEN</span><b id="d-gegeben">0,00</b></div>
+  </div>
+  <div class="stand" id="standbox">
+    <div class="lbl">Ich bin bei</div>
+    <div class="wert" id="d-stand">0,00</div>
+  </div>
+</div>
+
+<div class="weg-reihe">
+  <div class="weg" id="weg"></div>
+  <button class="knopf grau klein" id="zurueck" title="Letztes Stück zurücklegen">↩ Zurück</button>
+</div>
+
+<div class="lade" id="lade"></div>
+
+<div class="unten">
+  <div class="melde" id="melde"></div>
+  <label class="ton"><input type="checkbox" id="ton" checked> Vorlesen</label>
+</div>
+
+<div class="ov" id="ov"><div class="box">
+  <div class="em" id="o-em">🎉</div>
+  <h2 id="o-titel"></h2>
+  <div class="sterne" id="o-sterne"></div>
+  <p id="o-text"></p>
+  <div class="weg2" id="o-weg"></div>
+  <button class="knopf blau" id="o-weiter">Nächste Aufgabe</button>
+</div></div>
+
+<script>
+'use strict';
+
+/* ============================================================
+   Geldstücke
+   Werte in Cent – mit Kommazahlen zu rechnen führt bei Geld
+   früher oder später zu 0,30000000000000004.
+   ============================================================ */
+const STUECKE = {
+  1:   { wert:1,    art:'k',  zahl:'1',   einh:'CENT', name:'ein Cent' },
+  2:   { wert:2,    art:'k',  zahl:'2',   einh:'CENT', name:'zwei Cent' },
+  3:   { wert:5,    art:'k',  zahl:'5',   einh:'CENT', name:'fünf Cent' },
+  4:   { wert:10,   art:'g',  zahl:'10',  einh:'CENT', name:'zehn Cent' },
+  5:   { wert:20,   art:'g',  zahl:'20',  einh:'CENT', name:'zwanzig Cent' },
+  6:   { wert:50,   art:'g',  zahl:'50',  einh:'CENT', name:'fünfzig Cent' },
+  7:   { wert:100,  art:'b',  zahl:'1',   einh:'EURO', name:'ein Euro' },
+  8:   { wert:200,  art:'b2', zahl:'2',   einh:'EURO', name:'zwei Euro' },
+  9:   { wert:500,  art:'s5', zahl:'5',   schein:true, name:'fünf Euro' },
+  10:  { wert:1000, art:'s10',zahl:'10',  schein:true, name:'zehn Euro' },
+  11:  { wert:2000, art:'s20',zahl:'20',  schein:true, name:'zwanzig Euro' },
+  12:  { wert:5000, art:'s50',zahl:'50',  schein:true, name:'fünfzig Euro' },
+  13:  { wert:10000,art:'s100',zahl:'100',schein:true, name:'einhundert Euro' },
+  14:  { wert:0,    art:'tg', name:'Trinkgeld' }
+};
+
+/* ---- Aufbau der Lade, maßstäblich nach dem Foto ---- */
+const FAECHER = (() => {
+  const L = 8, LINKS = 80, RECHTS = 2610;
+  const out = [];
+  const vorne = [
+    { id:1, gr:15, n:7,  gross:52 }, { id:2, gr:17, n:7,  gross:60 },
+    { id:3, gr:20, n:9,  gross:70 }, { id:4, gr:18, n:9,  gross:64 },
+    { id:5, gr:21, n:9,  gross:74 }, { id:6, gr:23, n:9,  gross:82 },
+    { id:7, gr:22, n:7,  gross:78 }
+  ];
+  /* Ein-Cent- und Zwei-Cent-Fach sind schmäler, alle übrigen gleich breit –
+     wie in der echten Lade. */
+  const platz = RECHTS - LINKS - 6 * L;
+  const w = platz / (2 * 0.72 + 5), wk = w * 0.72;
+  let x = LINKS;
+  vorne.forEach((f, i) => {
+    const br = (i < 2) ? wk : w;
+    out.push(Object.assign({}, f, { box:[x, 620, x + br, 1010] }));
+    x += br + L;
+  });
+
+  /* Die Scheinfächer reichen bis an den oberen Rand – der Platz darüber
+     war ungenutzt, und größere Scheine sind leichter zu treffen. */
+  const oben = 45, unten = 612, hoehe = (unten - oben - 2 * L) / 3;
+  [9, 10, 11].forEach((id, i) => {
+    const y = oben + i * (hoehe + L);
+    out.push({ id:id, box:[165, y, 1170, y + hoehe] });
+  });
+
+  out.push({ id:14, box:[1182, 45, 1330, 612] });
+
+  const ro = 45, ru = 612, rh = (ru - ro - L) / 2;
+  [12, 13].forEach((id, i) => {
+    const y = ro + i * (rh + L);
+    out.push({ id:id, box:[1348, y, 2200, y + rh] });
+  });
+
+  out.push({ id:8, gr:26, n:8, gross:86, hoch:true, box:[RECHTS - w, 40, RECHTS, 612] });
+  return out;
+})();
+
+/* Immer dasselbe Streubild: Ein Fach, das bei jedem Neuzeichnen anders
+   aussieht, lenkt ab. Deshalb ein Zufall mit festem Startwert. */
+function wuerfel(saat) {
+  let z = saat;
+  return () => { z = (z * 1103515245 + 12345) & 0x7fffffff; return z / 0x7fffffff; };
+}
+
+/** Zwölf Sterne im Kreis, wie auf jeder Euro-Note. */
+function sternenkranz() {
+  let h = '';
+  for (let i = 0; i < 12; i++) {
+    const w = i / 12 * 2 * Math.PI;
+    h += '<i style="left:' + (50 + 42 * Math.sin(w) - 5.5) + '%;top:' +
+         (50 - 42 * Math.cos(w) - 5.5) + '%"></i>';
+  }
+  return h;
+}
+
+const X0 = 40, Y0 = 30, BR = 2660, HO = 1010;
+const lade = document.getElementById('lade');
+
+FAECHER.forEach(f => {
+  const s = STUECKE[f.id];
+  const [x1, y1, x2, y2] = f.box;
+  const el = document.createElement('div');
+  el.className = 'f';
+  el.style.left   = ((x1 - X0) / BR * 100) + '%';
+  el.style.top    = ((y1 - Y0) / HO * 100) + '%';
+  el.style.width  = ((x2 - x1) / BR * 100) + '%';
+  el.style.height = ((y2 - y1) / HO * 100) + '%';
+  el.dataset.fach = f.id;
+  el.title = s.name;
+
+  if (s.schein) {
+    const b = document.createElement('div');
+    b.className = 'schein ' + s.art;
+    b.innerHTML = '<span class="holo"></span>' +
+                  '<span class="zahl">' + s.zahl + '</span>' +
+                  '<span class="eur">EURO</span>' +
+                  '<span class="tor"></span><span class="bruecke"></span>' +
+                  '<span class="sterne">' + sternenkranz() + '</span>';
+    el.appendChild(b);
+  } else if (f.id === 14) {
+    /* Trinkgeld: gemischte Münzen hochkant, so wie sie im Schacht stehen. */
+    const st = document.createElement('div'); st.className = 'streu';
+    const r = wuerfel(999);
+    const farben = ['k', 'g', 'g', 'b', 'k'];
+    for (let i = 0; i < 9; i++) {
+      const m = document.createElement('div');
+      const c = farben[Math.floor(r() * farben.length)];
+      m.className = 'kante-m';
+      m.style.background = c === 'k'
+        ? 'linear-gradient(90deg,#8c4f28,#d08a55 40%,#8c4f28)'
+        : (c === 'g' ? 'linear-gradient(90deg,#a87a12,#f0cf6a 40%,#a87a12)'
+                     : 'linear-gradient(90deg,#98a0a8,#eef1f4 40%,#98a0a8)');
+      const br2 = 8 + r() * 4;
+      m.style.width = br2 + 'px';
+      m.style.height = (br2 * 2.6) + 'px';
+      m.style.left = (18 + r() * 52) + '%';
+      m.style.top = (6 + i * 10 + r() * 3) + '%';
+      m.style.transform = 'rotate(' + (r() * 16 - 8) + 'deg)';
+      st.appendChild(m);
+    }
+    el.appendChild(st);
+  } else {
+    /* Münzen locker verteilt, leicht gedreht, teils angeschnitten –
+       Schüttgut, keine Reihe. */
+    const st = document.createElement('div'); st.className = 'streu';
+    const r = wuerfel(f.id * 7919 + 13);
+    for (let i = 0; i < f.n; i++) {
+      const m = document.createElement('div');
+      m.className = 'm ' + s.art;
+      const d = f.gr * (0.9 + r() * 0.2);
+      m.style.width = d + 'px'; m.style.height = d + 'px';
+      m.style.left = (-4 + r() * 100) + '%';
+      m.style.top  = (-6 + r() * 105) + '%';
+      m.style.opacity = (0.62 + r() * 0.3).toFixed(2);
+      st.appendChild(m);
+    }
+    el.appendChild(st);
+
+    const g = document.createElement('div');
+    g.className = 'gross ' + s.art;
+    g.style.width = f.gross + 'px'; g.style.height = f.gross + 'px';
+    g.style.fontSize = (f.gross * 0.30) + 'px';
+    g.innerHTML = '<span class="zahl">' + s.zahl + '</span>' +
+                  '<span class="einh">' + s.einh + '</span>';
+    el.appendChild(g);
+  }
+
+  el.addEventListener('click', () => greifen(f.id, el));
+  lade.appendChild(el);
+});
+
+/* ============================================================
+   Zahlwörter – für das laute Mitzählen
+   Aus 30 wird nicht „dreißig Komma null", sondern „dreißig".
+   ============================================================ */
+const EIN = ['null','eins','zwei','drei','vier','fünf','sechs','sieben','acht','neun','zehn',
+  'elf','zwölf','dreizehn','vierzehn','fünfzehn','sechzehn','siebzehn','achtzehn','neunzehn'];
+const ZEHNER = ['','','zwanzig','dreißig','vierzig','fünfzig','sechzig','siebzig','achtzig','neunzig'];
+
+function zahlwort(n) {
+  if (n < 20) return EIN[n];
+  if (n < 100) {
+    const e = n % 10, z = Math.floor(n / 10);
+    return (e ? (e === 1 ? 'ein' : EIN[e]) + 'und' : '') + ZEHNER[z];
+  }
+  if (n === 100) return 'einhundert';
+  return String(n);
+}
+
+/** „siebzehn Euro zwanzig" · „acht Euro" */
+function betragWort(cent) {
+  const e = Math.floor(cent / 100), c = cent % 100;
+  if (e === 0) return zahlwort(c) + ' Cent';
+  const eu = (e === 1 ? 'ein' : zahlwort(e)) + ' Euro';
+  return c ? eu + ' ' + zahlwort(c) : eu;
+}
+
+/**
+ * Was beim Weiterzählen gesprochen wird.
+ * Bleibt man im selben Euro, nur die Cent: „und zwanzig sind vierzig".
+ * Wird es glatt, nur die Euro: „und zwei sind zwanzig".
+ * Wechselt der Euro mit Rest, beides: „achtzehn achtzig".
+ */
+function standWort(vorher, nachher) {
+  const eV = Math.floor(vorher / 100), eN = Math.floor(nachher / 100), cN = nachher % 100;
+  if (cN === 0) return zahlwort(eN);
+  if (eV === eN) return zahlwort(cN);
+  return zahlwort(eN) + ' ' + zahlwort(cN);
+}
+
+let stimme = null;
+function stimmeSuchen() {
+  const alle = window.speechSynthesis ? speechSynthesis.getVoices() : [];
+  const deutsch = alle.filter(v => /^de/i.test(v.lang));
+  /* Weibliche Stimmen klingen mit erhöhter Tonlage natürlicher als
+     männliche, die dabei schnell blechern werden. */
+  stimme = deutsch.find(v => /anna|petra|katja|marlene|vicki|helena|amira/i.test(v.name)) ||
+           deutsch.find(v => /de[-_]AT/i.test(v.lang)) ||
+           deutsch[0] || null;
+}
+if (window.speechSynthesis) {
+  stimmeSuchen();
+  speechSynthesis.onvoiceschanged = stimmeSuchen;
+}
+
+function sprich(text) {
+  if (!document.getElementById('ton').checked) return;
+  if (!window.speechSynthesis) return;
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    /* Höher und etwas flotter – die Voreinstellung klingt wie eine Ansage
+       am Bahnhof. Ein Kind hört lieber jemandem zu, der mitzählt. */
+    u.lang = 'de-AT'; u.rate = 1.06; u.pitch = 1.45;
+    if (stimme) u.voice = stimme;
+    speechSynthesis.speak(u);
+  } catch (_) {}
+}
+
+/* ============================================================
+   Aufgaben
+   ============================================================ */
+const STUFEN = [
+  { name:'1 · Leicht',  max:1000,  schritt:10, scheine:[500,1000,2000],       nachlegen:false },
+  { name:'2 · Cent',    max:2000,  schritt:5,  scheine:[500,1000,2000,5000],  nachlegen:false },
+  { name:'3 · Größer',  max:5000,  schritt:1,  scheine:[1000,2000,5000,10000],nachlegen:false },
+  { name:'4 · Nachlegen',max:5000, schritt:1,  scheine:[1000,2000,5000],      nachlegen:true }
+];
+
+let stufe = 0, punkte = 0, serie = 0;
+let summe = 0, gegeben = 0, stand = 0, genommen = [], laeuft = false;
+
+const zuf = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+
+/**
+ * Was legt ein Kunde nach?
+ *
+ * Nicht irgendetwas. Bei 34,61 € und einem Fünfziger gibt niemand einen
+ * Euro dazu – das brächte nichts. Gegeben wird nachgelegt, damit das
+ * Wechselgeld glatter wird:
+ *   · die Cent genau (0,61) → das Retour wird ein voller Euro-Betrag
+ *   · die Cent plus volle Euro (4,61) → ein runder Betrag wie 20 €
+ *   · ein kleines Stück (0,01), damit die krummen Cent verschwinden
+ * Alles andere ergibt keinen Sinn und wird deshalb gar nicht erzeugt.
+ */
+function nachlegen(summe, gegeben) {
+  const rest = summe % 100;
+  const kandidaten = [];
+
+  if (rest) {
+    /* Cent genau – aber nur, wenn das Retour überschaubar bleibt. Wer 19,11
+       zu zahlen hat, legt keine elf Cent zu einem Fünfziger, um einunddreißig
+       Euro zurückzubekommen. */
+    if (gegeben + rest - summe <= 2000) kandidaten.push(rest);
+    [100, 200, 500].forEach(e => {
+      const dazu = rest + e;
+      if (gegeben + dazu - summe <= 2000) kandidaten.push(dazu);
+    });
+  }
+
+  /* Kleines Stück obendrauf – aber nur, wenn es etwas BRINGT: Das Retour
+     muss dadurch glatter werden. Bei 27,00 und einem Fünfziger legt
+     niemand zehn Cent dazu, das Retour wäre danach krumm statt glatt. */
+  const vorher = gegeben - summe;
+  if (vorher % 10 !== 0 && vorher <= 2000) {
+    [1, 2, 5, 10, 20, 50].forEach(m => {
+      if ((vorher + m) % 10 === 0 && m <= 50) kandidaten.push(m);
+    });
+  }
+
+  if (!kandidaten.length) return 0;
+  return kandidaten[zuf(0, kandidaten.length - 1)];
+}
+const fmt = c => (c / 100).toFixed(2).replace('.', ',');
+
+function neueAufgabe() {
+  const s = STUFEN[stufe];
+  while (true) {
+    summe = zuf(Math.ceil(100 / s.schritt), Math.floor(s.max / s.schritt)) * s.schritt;
+    const moeglich = s.scheine.filter(x => x > summe);
+    if (s.nachlegen && moeglich.length) {
+      /* Beim Nachlegen greift der Kunde zum PASSENDEN Schein, nicht zum
+         größten, den er hat. Wer 19,11 zu zahlen hat, legt einen Zwanziger
+         und elf Cent hin – nicht einen Fünfziger. Meist der nächstpassende
+         Schein, seltener der übernächste. */
+      const i = (Math.random() < 0.75 || moeglich.length < 2) ? 0 : 1;
+      gegeben = moeglich[i];
+    } else {
+      gegeben = moeglich.length ? moeglich[zuf(0, moeglich.length - 1)]
+                                : s.scheine[s.scheine.length - 1];
+    }
+    if (s.nachlegen) {
+      const d = nachlegen(summe, gegeben);
+      if (d) gegeben += d; else continue;
+    }
+    if (gegeben > summe) break;
+  }
+
+  stand = summe; genommen = []; laeuft = true;
+  document.getElementById('d-summe').textContent = fmt(summe) + ' €';
+  document.getElementById('d-gegeben').textContent = fmt(gegeben) + ' €';
+  melden('', '');
+  zeichnen();
+  sprich(betragWort(summe));
+}
+
+function zeichnen() {
+  document.getElementById('d-stand').textContent = fmt(stand) + ' €';
+  document.getElementById('standbox').classList.toggle('fertig', stand === gegeben);
+  const w = document.getElementById('weg');
+  if (!genommen.length) {
+    w.innerHTML = '<span class="leer">Noch nichts herausgezählt</span>';
+  } else {
+    w.innerHTML = genommen.map(id => {
+      const s = STUECKE[id];
+      return '<span class="st"><i class="' + (s.schein ? 's ' + s.art : s.art) + '"></i>' +
+             (s.schein ? s.zahl + ' €' : (s.wert >= 100 ? s.wert / 100 + ' €' : s.wert + ' ¢')) +
+             '</span>';
+    }).join('');
+  }
+  document.getElementById('p-punkte').textContent = punkte;
+  document.getElementById('p-serie').textContent = serie;
+}
+
+function melden(text, art) {
+  const m = document.getElementById('melde');
+  m.textContent = text;
+  m.className = 'melde' + (art ? ' ' + art : '');
+}
+
+/* ---- Der Griff in die Lade ---- */
+function greifen(id, el) {
+  if (!laeuft) return;
+  const s = STUECKE[id];
+
+  const nein = (grund) => {
+    el.classList.add('falsch');
+    setTimeout(() => el.classList.remove('falsch'), 340);
+    melden(grund, 'schlecht');
+  };
+
+  if (id === 14) { nein('Das ist das Trinkgeld – da nehmen wir nichts heraus.'); return; }
+
+  /* Regel 1: Nie über den gegebenen Betrag hinaus. */
+  if (stand + s.wert > gegeben) {
+    nein('Damit wärst du über ' + fmt(gegeben) + ' € – nimm etwas Kleineres.');
+    return;
+  }
+  /* Die Reihenfolge ist FREI. Wer 1 €, 20 €, 10 € nimmt, gibt dieselben
+     Scheine heraus wie mit 1 €, 10 €, 20 € – nur anders geordnet. Das zu
+     verbieten wäre Schulmeisterei. Aufsteigend liest sich für den Kunden
+     leichter mit; darauf weist die Auswertung hin, mehr nicht. */
+
+  const vorher = stand;
+  stand += s.wert;
+  genommen.push(id);
+  fliegen(el, s);
+  el.classList.add('gut');
+  setTimeout(() => el.classList.remove('gut'), 260);
+  melden('', '');
+  zeichnen();
+  sprich('und ' + s.name.replace(' Cent', '').replace(' Euro', ' Euro') + ' sind ' +
+         standWort(vorher, stand));
+
+  /* Genau erreicht: Das war es. Kurz stehen lassen, damit man den grünen
+     Zählstand noch sieht, und die Stimme nicht überrannt wird. */
+  if (stand === gegeben) setTimeout(auswerten, 900);
+}
+
+document.getElementById('zurueck').addEventListener('click', () => {
+  if (!laeuft || !genommen.length) return;
+  const id = genommen.pop();
+  stand -= STUECKE[id].wert;
+  melden('', '');
+  zeichnen();
+});
+
+/**
+ * Das genommene Stück fliegt aus dem Fach zum Zählstand.
+ * Reine Rückmeldung – ohne sie fühlt sich der Griff wie nichts an.
+ */
+function fliegen(el, s) {
+  const von = el.getBoundingClientRect();
+  const ziel = document.getElementById('standbox').getBoundingClientRect();
+  const d = document.createElement('div');
+  const gr = s.schein ? 46 : 40;
+  d.className = 'flug ' + (s.schein ? 'schein ' + s.art : s.art);
+  d.style.width = (s.schein ? gr * 1.7 : gr) + 'px';
+  d.style.height = gr + 'px';
+  d.style.fontSize = (gr * 0.34) + 'px';
+  d.style.left = (von.left + von.width / 2 - gr / 2) + 'px';
+  d.style.top  = (von.top + von.height / 2 - gr / 2) + 'px';
+  if (!s.schein) {
+    d.style.background = s.art === 'k'
+      ? 'radial-gradient(circle at 34% 30%,#d08a55,#b06a3b 55%,#8c4f28)'
+      : (s.art === 'g' ? 'radial-gradient(circle at 34% 30%,#f0cf6a,#d8a72a 55%,#a87a12)'
+      : (s.art === 'b' ? 'radial-gradient(circle at 34% 30%,#eee,#c9ced4 52%,#9aa1a8)'
+                       : 'radial-gradient(circle at 34% 30%,#f0cf6a,#d8a72a 55%,#a87a12)'));
+    if (s.art === 'b')  d.style.border = '4px solid #d8a72a';
+    if (s.art === 'b2') d.style.border = '4px solid #c9ced4';
+    d.style.color = s.art === 'k' ? '#4a2412' : (s.art === 'b' ? '#2c3338' : '#5a4208');
+  } else {
+    d.style.color = 'rgba(0,0,0,.65)';
+  }
+  d.innerHTML = '<span class="z">' + s.zahl + '</span>' +
+                '<span class="e">' + (s.schein ? '€' : (s.einh === 'EURO' ? '€' : '¢')) + '</span>';
+  document.body.appendChild(d);
+  requestAnimationFrame(() => {
+    d.style.transform = 'translate(' +
+      (ziel.left + ziel.width / 2 - von.left - von.width / 2) + 'px,' +
+      (ziel.top + ziel.height / 2 - von.top - von.height / 2) + 'px) scale(.45)';
+    d.style.opacity = '0';
+  });
+  setTimeout(() => d.remove(), 560);
+}
+
+/* ---- Abschluss ---- */
+/* Kein „Fertig“-Knopf: Wer den gegebenen Betrag erreicht hat, ist fertig.
+   Über den Betrag hinaus geht ohnehin nichts, und ein Knopf, der immer
+   dasselbe sagt, wird bald blind gedrückt. */
+function auswerten() {
+  if (!laeuft) return;
+  laeuft = false;
+  const fertig = stand === gegeben;
+  /* Wie wenige Stücke wären möglich gewesen? Nur zur Rückmeldung –
+     mehr Stücke sind nicht falsch, solange aufsteigend gezählt wurde. */
+  const bestens = wenigste(gegeben - summe);
+  const sterne = !fertig ? 0 : (genommen.length <= bestens ? 3 : 2);
+  /* Nur ein Hinweis, kein Abzug: Aufsteigend kann der Kunde leichter
+     mitzählen, richtig ist es auch anders. */
+  let aufsteigend = true;
+  for (let i = 1; i < genommen.length; i++)
+    if (STUECKE[genommen[i]].wert < STUECKE[genommen[i-1]].wert) aufsteigend = false;
+
+  punkte += fertig ? (sterne === 3 ? 10 : 6) : 0;
+  serie = fertig ? serie + 1 : 0;
+  zeichnen();
+
+  const ov = document.getElementById('ov');
+  document.getElementById('o-em').textContent = fertig ? (sterne === 3 ? '🌟' : '👍') : '🙈';
+  document.getElementById('o-titel').textContent = fertig
+    ? (sterne === 3 ? 'Perfekt!' : 'Passt!')
+    : 'Noch nicht ganz';
+  document.getElementById('o-sterne').textContent =
+    '★★★☆☆'.slice(3 - sterne, 6 - sterne);
+  document.getElementById('o-text').innerHTML = fertig
+    ? ((sterne === 3
+        ? 'Genau richtig – und mit den wenigsten Geldstücken.'
+        : 'Richtig herausgezählt. Mit ' + bestens + ' Stücken ginge es auch.') +
+       (aufsteigend ? '' :
+        '<br><span style="opacity:.7">Tipp: von klein nach groß kann der Kunde leichter mitzählen.</span>'))
+    : 'Du bist bei <b>' + fmt(stand) + ' €</b> stehengeblieben, der Kunde hat aber <b>' +
+      fmt(gegeben) + ' €</b> gegeben. Zähl weiter, bis du dort bist.';
+  document.getElementById('o-weg').innerHTML = document.getElementById('weg').innerHTML;
+  ov.classList.add('auf');
+  sprich(fertig ? 'Passt genau!' : 'Da fehlt noch etwas.');
+}
+
+document.getElementById('o-weiter').addEventListener('click', () => {
+  document.getElementById('ov').classList.remove('auf');
+  neueAufgabe();
+});
+
+/** Wenigste Stücke für einen Betrag – nur für die Rückmeldung. */
+function wenigste(cent) {
+  const w = [10000, 5000, 2000, 1000, 500, 200, 100, 50, 20, 10, 5, 2, 1];
+  let n = 0;
+  w.forEach(x => { while (cent >= x) { cent -= x; n++; } });
+  return n;
+}
+
+/* ---- Stufen ---- */
+const sw = document.getElementById('stufen');
+STUFEN.forEach((s, i) => {
+  const b = document.createElement('button');
+  b.textContent = s.name;
+  b.addEventListener('click', () => {
+    stufe = i;
+    [...sw.children].forEach((x, j) => x.classList.toggle('an', j === i));
+    neueAufgabe();
+  });
+  sw.appendChild(b);
+});
+sw.children[0].classList.add('an');
+neueAufgabe();
+</script>
+</body></html>
