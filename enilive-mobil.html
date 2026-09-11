@@ -238,13 +238,34 @@ body{
 .start button{background:#fff;color:var(--eni);border:none;border-radius:12px;
   padding:14px 28px;font:700 16px 'Montserrat',sans-serif}
 
+/* WICHTIGE HINWEISE – nur einstellen und nachsehen, nicht quittieren */
+.hw{border:1px solid #e6e2dc;border-left:5px solid #e8590c;border-radius:11px;
+  padding:11px 12px;margin-bottom:9px}
+.hw.aus{border-left-color:#c8ccd0;opacity:.58}
+.hw-t{font-size:15.5px;font-weight:700;color:var(--t1);line-height:1.3;
+  white-space:pre-wrap}
+.hw-m{margin-top:4px;font-size:12px;color:var(--t3)}
+.hw-s{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.hw-s span{font-size:12px;padding:3px 9px;border-radius:999px}
+.hw-s .ja{background:#e8f6ee;color:#1f7a4d}
+.hw-s .nein{background:#fdeee6;color:#b34a0c}
+.hw-end{margin-top:10px;font:600 13px 'Montserrat',sans-serif;padding:7px 14px;
+  border:1px solid #d7dee2;border-radius:8px;background:#f6f8f9;color:var(--t2)}
+.hw-w{display:inline-flex;align-items:center;gap:8px;font-size:14.5px;
+  color:var(--t2);margin-top:10px}
+.hw-w input[type=checkbox]{width:19px;height:19px;accent-color:#e8590c}
+.hw-w2{margin-top:12px;font-size:12.5px;color:var(--t3)}
+.hw-namen{display:flex;flex-wrap:wrap;gap:0 18px}
+.hw-neu{margin-top:14px;width:100%;padding:13px;border:none;border-radius:10px;
+  background:#e8590c;color:#fff;font:700 15.5px 'Montserrat',sans-serif}
+
 </style>
 </head>
 <body>
 <div id="app"><div class="start"><h2>Enilive Station Venier</h2>
   <p>Wird geladen …</p></div></div>
 <script>
-/* Enilive Station Venier – mobile Ansicht 2.3.0
+/* Enilive Station Venier – mobile Ansicht 2.4.0
    ------------------------------------------------------------
    Erzeugt aus denselben Modulen wie das Dashboard. Nicht von Hand
    ändern: Änderungen gehören in src/ und werden mit bundle.py
@@ -397,8 +418,19 @@ const STORE = (() => {
     },
 
     /** Eintrag löschen – hinterlässt Grabstein. */
+    /**
+     * Löschen. Ein zweites Löschen desselben Schlüssels ist WIRKUNGSLOS.
+     *
+     * Vorher wurde auch auf einen bereits gesetzten Grabstein ein neuer
+     * geschrieben – mit neuem Zeitstempel und einer Benachrichtigung an
+     * alle Zuhörer. Wer beim Zeichnen löscht, löste damit einen
+     * Neuaufbau aus, der wieder löschte: eine Endlosschleife, die das
+     * Dashboard unbedienbar machte. Klicks kamen nicht mehr an, weil die
+     * Seite zwischen Drücken und Loslassen neu aufgebaut wurde.
+     */
     del(key) {
-      if (!data.items[key]) return;
+      const e = data.items[key];
+      if (!e || e.d) return;                 // nicht vorhanden oder längst gelöscht
       data.items[key] = { t: now(), d: true };
       dirty = true; writeLS(); notify();
     },
@@ -1003,6 +1035,29 @@ const DP = (() => {
       k.slice(0, k.lastIndexOf('|')) === name && d.eintraege[k]).length;
   }
 
+  /**
+   * Wer hat zu diesem Zeitpunkt Dienst?
+   *
+   * Liefert { name, von, bis } je Person, Minuten seit Mitternacht.
+   * Das Dienstende zählt NICHT mehr mit: Endet eine Schicht um 13.00 und
+   * beginnt die nächste um 13.00, wären das sonst für eine Minute zwei
+   * Namen – und bei allem, was eine Bestätigung einer Person zuordnet,
+   * genau eine Minute lang keine eindeutige Antwort.
+   */
+  function imDienst(zeitpunkt) {
+    const n = zeitpunkt || new Date();
+    const d = monat(n.getFullYear(), n.getMonth() + 1);
+    const tag = n.getDate();
+    const jetzt = n.getHours() * 60 + n.getMinutes();
+    const out = [];
+    d.emps.forEach(name => {
+      const p = fromStore(d.eintraege[name + '|' + tag] || '');
+      if (!p || p.leer || p.code) return;
+      if (jetzt >= p.von && jetzt < p.bis) out.push({ name: name, von: p.von, bis: p.bis });
+    });
+    return out;
+  }
+
   /* ---- Wochenblöcke, Montag bis Sonntag ----------------- */
   /**
    * Wochenblöcke, Montag bis Sonntag – immer sieben Einträge je Block.
@@ -1081,7 +1136,7 @@ const DP = (() => {
     'August','September','Oktober','November','Dezember'][m - 1];
 
   return { NAMEN_TAG, parse, toStore, fromStore, fmt, fmtLang, stunden, monat, exists,
-           speichern, setzen, empHinzu, empEntfernen, empAnzahl,
+           speichern, setzen, empHinzu, empEntfernen, empAnzahl, imDienst,
            bloecke, summen, jahr, monatsName, key };
 })();
 
@@ -1110,8 +1165,14 @@ const PROT = (() => {
      Quelle dazukommt, bevor sie hier eingetragen ist. */
   const ARTEN = {
     aufgabe:    'Aufgabe',
-    erinnerung: 'Erinnerung'
+    erinnerung: 'Erinnerung',
+    hinweis:    'Wichtiger Hinweis'
   };
+
+  /* Arten, die nie aufgeräumt werden. Eine Quittierung „gelesen und
+     verstanden" ist ein Nachweis – der ist nach neunzig Tagen nicht
+     weniger wert, sondern erst dann wirklich gebraucht. */
+  const BLEIBT = { hinweis: true };
 
   const artName = a => ARTEN[a] || String(a || '–');
 
@@ -1187,11 +1248,13 @@ const PROT = (() => {
     return n;
   }
 
-  /** Einträge älter als 90 Tage entfernen, damit das Buch nicht wuchert. */
+  /** Einträge älter als 90 Tage entfernen, damit das Buch nicht wuchert.
+      Nachweispflichtige Arten bleiben, siehe BLEIBT. */
   function aufraeumen() {
     const cut = Date.now() - 90 * 864e5;
     let n = 0;
     STORE.list('log').forEach(x => {
+      if (BLEIBT[x.art]) return;
       if ((x.ts || 0) < cut) { STORE.del(x._key); n++; }
     });
     return n;
@@ -1211,7 +1274,7 @@ const PROT = (() => {
     return tage;
   }
 
-  return { schreiben, alle, arten, artName, nachTagen, uebernehmen, aufraeumen };
+  return { schreiben, alle, arten, artName, nachTagen, uebernehmen, aufraeumen, BLEIBT };
 })();
 
 /* ===== 48-verwaltung.js ===== */
@@ -1251,23 +1314,7 @@ const TASKS = (() => {
 
   /** Wer hat gerade Dienst? Aus dem Dienstplan, ohne Nachfrage. */
   function diensthabend() {
-    const n = new Date();
-    const d = DP.monat(n.getFullYear(), n.getMonth() + 1);
-    const tag = n.getDate();
-    const jetzt = n.getHours() * 60 + n.getMinutes();
-    const treffer = [];
-    d.emps.forEach(e => {
-      const v = d.eintraege[e + '|' + tag];
-      const p = v ? DP.fromStore(v) : null;
-      if (!p || p.leer || p.code) return;
-      if (jetzt >= p.von && jetzt <= p.bis) treffer.push(e);
-      else treffer.push(null);
-    });
-    const imDienst = d.emps.filter(e => {
-      const p = DP.fromStore(d.eintraege[e + '|' + tag] || '');
-      return p && !p.leer && !p.code && jetzt >= p.von && jetzt <= p.bis;
-    });
-    return imDienst.join(', ');
+    return DP.imDienst(new Date()).map(x => x.name).join(', ');
   }
 
   /** Aufgabe abhaken. Zeitstempel wird gesetzt oder überschrieben. */
@@ -1726,9 +1773,13 @@ const ERIN = (() => {
    * Trägt eine Erinnerung `wenn: 'fahne'`, wird sie nur angeboten, solange
    * die fällige Fahne von der aufgehängten abweicht.
    */
-  function faellig(e) {
+  function faellig(e, bezug) {
     if (e.wenn !== 'fahne') return true;
-    try { return !!LOTT.wechselFaellig(); } catch (_) { return false; }
+    /* Erst am Tag NACH der Bekanntgabe: Die neue Summe steht am Abend nach
+       der Ziehung fest, und dann hängt niemand mehr Fahnen um.
+       Der Bezugszeitpunkt wird durchgereicht, damit `offen(datum)` auch für
+       einen anderen Tag richtig antwortet. */
+    try { return !!LOTT.wechselSeitGestern(bezug); } catch (_) { return false; }
   }
 
   function offen(jetzt) {
@@ -1737,7 +1788,7 @@ const ERIN = (() => {
     return alle()
       .filter(e => e.aktiv !== false)
       .filter(e => amTag(e, d))
-      .filter(faellig)
+      .filter(e => faellig(e, d))
       .map(e => {
         const ab = minuten(e.zeit);
         if (ab === null || nun < ab) return null;
@@ -1755,6 +1806,181 @@ const ERIN = (() => {
   return { START, ersteinrichtung, nachtragen, alle, neu, aendern, weg, schieben, faellig,
            bestaetigen, bestaetigt, offen, amTag, minuten, alsZeit,
            imBetrieb, FRUEH, SPAET };
+})();
+
+/* ===== 52-hinweis.js ===== */
+/* ============================================================
+   WICHTIGE HINWEISE
+   ------------------------------------------------------------
+   Eine Mitteilung, die jeder Mitarbeiter gesehen und bestätigt
+   haben muss. Anders als eine Erinnerung gilt sie nicht jeden
+   Tag aufs Neue, sondern einmal je Person – und sie bleibt für
+   jeden offen, bis er sie quittiert hat.
+
+   Angezeigt wird sie nur am Dashboard an der Kassa: Dort sitzt
+   der Mitarbeiter, und nur dort steht über den Dienstplan fest,
+   wer gerade da ist. Ohne diesen Namen wäre die Bestätigung
+   kein Nachweis, deshalb erscheint der Hinweis dann gar nicht.
+
+   Erst eine Stunde nach Dienstbeginn, damit der Mitarbeiter der
+   vorigen Schicht sicher nicht mehr im Haus ist und nicht für
+   einen anderen quittiert.
+
+   Aufbau:
+     "hw:<id>"  → { text, an, modus, bis, aktiv, ts }
+       text  – die Mitteilung
+       an    – Namen, für die sie gilt; leer heißt alle
+       modus – 'dienst' (eine Stunde nach Dienstbeginn)
+               'sofort' (beim nächsten Aufbau des Dashboards)
+       bis   – "JJJJ-MM-TT", ab wann sie nicht mehr erscheint;
+               leer heißt: bis sie beendet wird
+       aktiv – beendete Hinweise bleiben als Nachweis stehen
+       ts    – wann eingestellt
+
+     "hwq:<id>_<name>" → { hw, wer, ts }
+
+   Die Quittierung trägt den Namen im Schlüssel. Dadurch kann
+   derselbe Hinweis von mehreren Personen bestätigt werden, und
+   zwei Geräte schreiben in denselben Eintrag statt zwei
+   anzulegen. Quittierungen werden nie aufgeräumt – sie sind der
+   Nachweis.
+   ============================================================ */
+const HINWEIS = (() => {
+  /* Vorlauf nach Dienstbeginn. Eine Stunde: lange genug, dass die vorige
+     Schicht gegangen ist, kurz genug, dass der Hinweis den Tag nicht
+     verpasst. */
+  const NACH_BEGINN = 60;
+
+  /* Aus einem Namen einen Schlüsselteil machen. Umlaute ausgeschrieben,
+     alles andere zu Unterstrichen – der Schlüssel muss über Geräte und
+     Zeichensätze hinweg derselbe bleiben. */
+  const kennung = (name) => String(name || '').toLowerCase()
+    .replace(/ä/g,'ae').replace(/ö/g,'oe').replace(/ü/g,'ue').replace(/ß/g,'ss')
+    .replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0, 32);
+
+  const tagKey = (d) => d.getFullYear() + '-' +
+    String(d.getMonth() + 1).padStart(2, '0') + '-' +
+    String(d.getDate()).padStart(2, '0');
+
+  const qKey = (key, name) =>
+    'hwq:' + String(key).replace('hw:', '') + '_' + kennung(name);
+
+  /* ---- Lesen ------------------------------------------------ */
+
+  /** Alle Hinweise, neueste zuerst. */
+  const alle = () => STORE.list('hw').sort((a, b) => (b.ts || 0) - (a.ts || 0));
+
+  /** Ist der Hinweis abgelaufen? Leeres Datum heißt: nein. */
+  function abgelaufen(h, bezug) {
+    if (!h.bis) return false;
+    return tagKey(bezug || new Date()) > String(h.bis);
+  }
+
+  /** Läuft der Hinweis gerade? */
+  const laeuft = (h, bezug) => h.aktiv !== false && !abgelaufen(h, bezug);
+
+  /** Für wen gilt er? Leere Auswahl heißt: alle aus dem Dienstplan. */
+  function empfaenger(h, bezug) {
+    if (h.an && h.an.length) return h.an.slice();
+    const d = bezug || new Date();
+    return DP.monat(d.getFullYear(), d.getMonth() + 1).emps.slice();
+  }
+
+  const quittiert = (key, name) => STORE.get(qKey(key, name)) || null;
+
+  /** Wer hat bestätigt, wer fehlt noch? */
+  function stand(h, bezug) {
+    const fertig = [], offen = [];
+    empfaenger(h, bezug).forEach(n => {
+      const q = quittiert(h._key, n);
+      if (q) fertig.push({ name: n, ts: q.ts || 0 });
+      else offen.push(n);
+    });
+    fertig.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+    return { fertig: fertig, offen: offen };
+  }
+
+  /**
+   * Was muss der Mitarbeiter jetzt am Dashboard sehen?
+   *
+   * Hat laut Plan niemand oder mehr als eine Person Dienst, wird nichts
+   * angezeigt: Die Bestätigung ließe sich dann keinem Namen zuordnen und
+   * wäre als Nachweis wertlos.
+   */
+  function offen(jetzt) {
+    const d = jetzt || new Date();
+    const im = DP.imDienst(d);
+    if (im.length !== 1) return [];
+    const person = im[0];
+    const nun = d.getHours() * 60 + d.getMinutes();
+
+    return alle()
+      .filter(h => laeuft(h, d))
+      .filter(h => empfaenger(h, d).indexOf(person.name) >= 0)
+      .filter(h => !quittiert(h._key, person.name))
+      /* Kein Abgleich gegen den Einstellzeitpunkt: Was im Speicher steht,
+         ist eingestellt. Zwei Geräte gehen nie ganz gleich, und ein um
+         Minuten vorgehendes Handy würde seinen eigenen Hinweis sonst
+         unterdrücken. */
+      .filter(h => h.modus === 'sofort' || nun >= person.von + NACH_BEGINN)
+      /* Ältestes zuerst: Was am längsten offen ist, gehört zuerst gelesen. */
+      .sort((a, b) => (a.ts || 0) - (b.ts || 0))
+      .map(h => Object.assign({}, h, { wer: person.name }));
+  }
+
+  /** Wer würde jetzt quittieren? Für die Anzeige, nicht für die Ablage. */
+  function diensthabend(jetzt) {
+    const im = DP.imDienst(jetzt || new Date());
+    return im.length === 1 ? im[0].name : '';
+  }
+
+  /* ---- Schreiben -------------------------------------------- */
+
+  function neu(text, teil) {
+    text = String(text || '').trim();
+    if (!text) return null;
+    const t = teil || {};
+    return STORE.add('hw', {
+      text:  text,
+      an:    Array.isArray(t.an) ? t.an.slice() : [],
+      modus: t.modus === 'sofort' ? 'sofort' : 'dienst',
+      bis:   String(t.bis || ''),
+      aktiv: true,
+      ts:    Date.now()
+    });
+  }
+
+  function aendern(key, teil) {
+    const h = STORE.get(key);
+    if (!h) return false;
+    STORE.put(key, Object.assign({}, h, teil, { _key: undefined }));
+    return true;
+  }
+
+  /** Beenden heißt: erscheint nicht mehr. Der Nachweis bleibt. */
+  const beenden = key => aendern(key, { aktiv: false });
+
+  const weg = key => STORE.del(key);
+
+  /**
+   * Bestätigen. Der Name kommt aus dem Dienstplan, nicht aus einer
+   * Auswahl – sonst könnte jeder für jeden quittieren.
+   */
+  function bestaetigen(key, name) {
+    const h = STORE.get(key);
+    if (!h) return null;
+    const wer = String(name || diensthabend() || '').trim();
+    if (!wer) return null;
+    if (quittiert(key, wer)) return null;                 // schon bestätigt
+    const eintrag = { hw: key, wer: wer, ts: Date.now() };
+    STORE.put(qKey(key, wer), eintrag);
+    PROT.schreiben('hinweis', 'Gelesen und verstanden: ' + h.text, wer, key);
+    return eintrag;
+  }
+
+  return { NACH_BEGINN, alle, laeuft, abgelaufen, empfaenger, stand,
+           quittiert, offen, diensthabend, neu, aendern, beenden, weg,
+           bestaetigen, kennung, qKey };
 })();
 
 /* ===== m40-drive.js ===== */
@@ -2270,7 +2496,7 @@ const MFEED = (() => {
    6.21.0; auf dem Telefon fehlte sie, und dann muss man raten, welche
    Fassung gerade läuft – das ist bei der Fehlersuche schon einmal
    passiert. */
-const VERSION = '2.3.0';
+const VERSION = '2.4.0';
 
 const APP = (() => {
   const DS  = ['Mo','Di','Mi','Do','Fr','Sa','So'];
@@ -2291,6 +2517,7 @@ const APP = (() => {
     { id:'plan',  ic:'📅', lb:'Plan' },
     { id:'dienst',ic:'👥', lb:'Dienst' },
     { id:'notiz', ic:'✎',  lb:'Notizen' },
+    { id:'hw',    ic:'❗', lb:'Hinweise' },
     { id:'prot',  ic:'📖', lb:'Protokoll' }
   ];
 
@@ -2662,11 +2889,57 @@ const APP = (() => {
     </div>`;
   }
 
+  /* ---- Wichtige Hinweise --------------------------------- */
+  /* Nur zum Einstellen und Nachsehen. Angezeigt und quittiert wird der
+     Hinweis ausschließlich am Dashboard an der Kassa – dort sitzt der
+     Mitarbeiter, und nur dort steht über den Dienstplan fest, wer
+     bestätigt. Am Telefon arbeitet der Chef. */
+  function seiteHinweis() {
+    const l = HINWEIS.alle();
+    const n = new Date();
+    const namen = DP.monat(n.getFullYear(), n.getMonth() + 1).emps;
+
+    const karten = l.map(h => {
+      const s = HINWEIS.stand(h);
+      const laeuft = HINWEIS.laeuft(h);
+      return `<div class="hw${laeuft ? '' : ' aus'}">
+        <div class="hw-t">${esc(h.text)}</div>
+        <div class="hw-m">${esc(new Date(h.ts || 0).toLocaleDateString('de-AT',
+            { day:'2-digit', month:'2-digit', year:'numeric' }))}
+          · ${h.modus === 'sofort' ? 'sofort' : 'nach Dienstbeginn'}
+          · ${h.an && h.an.length ? esc(h.an.join(', ')) : 'alle'}
+          ${h.aktiv === false ? '· beendet' : ''}</div>
+        <div class="hw-s">
+          ${s.fertig.map(f => `<span class="ja">${esc(f.name)}</span>`).join('')}
+          ${s.offen.map(x => `<span class="nein">${esc(x)}</span>`).join('')}
+        </div>
+        ${laeuft ? `<button class="hw-end" onclick="APP.hwBeenden('${h._key}')"
+          >Beenden</button>` : ''}
+      </div>`;
+    }).join('');
+
+    return `<div class="karte">
+      <div class="kt">Neuer Hinweis</div>
+      <textarea id="hw-text" class="feld" rows="3"
+        placeholder="Mitteilung" oninput="APP.wachsen(this)"></textarea>
+      <label class="hw-w"><input type="checkbox" id="hw-sofort"> sofort anzeigen</label>
+      <div class="hw-w2">nur für – keiner angehakt heißt: alle</div>
+      <div class="hw-namen">${namen.map(x => `<label class="hw-w"><input
+        type="checkbox" class="hw-an" value="${esc(x)}"> ${esc(x)}</label>`).join('')}</div>
+      <button class="hw-neu" onclick="APP.hwNeu()">Hinweis einstellen</button>
+    </div>
+    <div class="karte">
+      <div class="kt">Eingestellt${l.length ? `<span class="neb">${l.length}</span>` : ''}</div>
+      ${karten || '<div class="leer">Noch keine Hinweise</div>'}
+    </div>`;
+  }
+
   /* ---- Aufbau -------------------------------------------- */
   const seite = id => id === 'heute'  ? seiteHeute()
                     : id === 'plan'   ? seitePlan()
                     : id === 'dienst' ? seiteDienst()
                     : id === 'notiz'  ? seiteNotiz()
+                    : id === 'hw'     ? seiteHinweis()
                     :                   seiteProt();
 
   /* Wird gerade getippt? Dann kein Neuaufbau – sonst verschwindet der Text. */
@@ -2779,6 +3052,25 @@ const APP = (() => {
       ERIN.aendern(k, { tage: t.sort() });
     },
     erWeg(k) { if (confirm('Erinnerung entfernen?')) ERIN.weg(k); },
+
+    /* Wichtige Hinweise – einstellen und beenden, nicht quittieren */
+    hwNeu() {
+      const t = document.getElementById('hw-text');
+      if (!t || !t.value.trim()) return;
+      const an = [...document.querySelectorAll('.hw-an')]
+        .filter(x => x.checked).map(x => x.value);
+      HINWEIS.neu(t.value, {
+        an: an,
+        modus: document.getElementById('hw-sofort').checked ? 'sofort' : 'dienst'
+      });
+      t.value = '';
+      bauen();
+    },
+    hwBeenden(k) {
+      if (!confirm('Hinweis beenden? Die Bestätigungen bleiben erhalten.')) return;
+      HINWEIS.beenden(k);
+      bauen();
+    },
     erNeu() {
       const t = document.getElementById('er-text'), z = document.getElementById('er-zeit');
       if (!t || !z || !t.value.trim()) return;
