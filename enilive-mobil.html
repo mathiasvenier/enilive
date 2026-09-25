@@ -265,7 +265,7 @@ body{
 <div id="app"><div class="start"><h2>Enilive Station Venier</h2>
   <p>Wird geladen …</p></div></div>
 <script>
-/* Enilive Station Venier – mobile Ansicht 2.4.0
+/* Enilive Station Venier – mobile Ansicht 2.5.0
    ------------------------------------------------------------
    Erzeugt aus denselben Modulen wie das Dashboard. Nicht von Hand
    ändern: Änderungen gehören in src/ und werden mit bundle.py
@@ -886,8 +886,31 @@ const AUSW = (() => {
 /* ============================================================
    DIENSTPLAN
    ------------------------------------------------------------
-   Speicher:  "dp:<jahr>-<monat>"  →  { emps:[Name], eintraege:{ "<name>|<tag>": "<wert>" } }
+   Speicher:  "dp:<jahr>-<monat>"  →  {
+                emps:      [Name],
+                eintraege: { "<name>|<tag>": "<wert>" },   ← PLAN
+                ist:       { "<name>|<tag>": "<wert>" },   ← tatsächlich
+                notiz:     { "<name>|<tag>": "Text" },
+                abschluss: { ts }                          ← Monat abgerechnet
+              }
    Werte:     "6-13" (Minuten seit Mitternacht als Paar), "u", "k" oder ""
+
+   PLAN und IST
+   ------------------------------------------------------------
+   Der Plan ist, was die Mitarbeiter sehen: Dashboard, Aushang,
+   Ausdruck. Er wird im Voraus erstellt und bleibt stehen.
+
+   Das Ist trägt der Chef nachträglich ein, und nur dort, wo
+   tatsächlich anders gearbeitet wurde. Es ist nirgends sichtbar
+   außer in der Verwaltung.
+
+   Gerechnet wird ausnahmslos mit dem Ist – Monatssummen, Urlaub,
+   Krankenstand, Jahreswerte, Auswertung für den Steuerberater.
+   Wo nichts eingetragen ist, IST der Plan der Ist-Wert; eine
+   nicht korrigierte Zeit wurde eben so gearbeitet, wie sie
+   geplant war. Deshalb gibt es keine Auswahl je Zeile und keinen
+   zweiten Satz Summen: es gibt nur eine Wahrheit, und das ist
+   das Ist.
    ============================================================ */
 const DP = (() => {
   const NAMEN_TAG = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'];
@@ -984,18 +1007,25 @@ const DP = (() => {
   /* ---- Monat lesen und schreiben ------------------------ */
   function monat(j, m) {
     const d = STORE.get(key(j, m));
-    if (d) return { emps: (d.emps || []).slice(), eintraege: Object.assign({}, d.eintraege || {}) };
-    // Noch nicht angelegt: Mitarbeiter aus dem Vormonat übernehmen
+    if (d) return { emps: (d.emps || []).slice(),
+                    eintraege: Object.assign({}, d.eintraege || {}),
+                    ist:       Object.assign({}, d.ist || {}),
+                    notiz:     Object.assign({}, d.notiz || {}),
+                    abschluss: d.abschluss || null };
+    /* Noch nicht angelegt: Mitarbeiter aus dem Vormonat übernehmen –
+       aber NUR die Namen. Ist-Werte und Notizen gehören zu ihrem Monat. */
     const vm = m === 1 ? { j: j - 1, m: 12 } : { j: j, m: m - 1 };
     const v = STORE.get(key(vm.j, vm.m));
     return { emps: (v && v.emps && v.emps.length) ? v.emps.slice() : STD_EMPS.slice(),
-             eintraege: {} };
+             eintraege: {}, ist: {}, notiz: {}, abschluss: null };
   }
 
   const exists = (j, m) => STORE.has(key(j, m));
 
   function speichern(j, m, daten) {
-    STORE.put(key(j, m), { emps: daten.emps, eintraege: daten.eintraege });
+    STORE.put(key(j, m), { emps: daten.emps, eintraege: daten.eintraege,
+                           ist: daten.ist || {}, notiz: daten.notiz || {},
+                           abschluss: daten.abschluss || null });
   }
 
   function setzen(j, m, name, tag, text) {
@@ -1007,6 +1037,77 @@ const DP = (() => {
     if (v) d.eintraege[k] = v; else delete d.eintraege[k];
     speichern(j, m, d);
     return { ok: true, wert: v, anzeige: fmtLang(v) };
+  }
+
+  /* ---- Ist-Werte und Notizen ---------------------------- */
+
+  /**
+   * Was zählt für diesen Tag? Der Ist-Wert, sonst der Plan.
+   * `d` ist ein Monat aus monat().
+   */
+  function istWert(d, name, tag) {
+    const k = name + '|' + tag;
+    const i = d.ist ? d.ist[k] : '';
+    return (i !== undefined && i !== null && i !== '') ? i : (d.eintraege[k] || '');
+  }
+
+  /** Weicht das Ist vom Plan ab? */
+  function abweichung(d, name, tag) {
+    const k = name + '|' + tag;
+    const i = d.ist ? d.ist[k] : '';
+    if (i === undefined || i === null || i === '') return false;
+    return i !== (d.eintraege[k] || '');
+  }
+
+  /**
+   * Ist-Wert setzen. Der Text darf eine Notiz enthalten, abgetrennt
+   * durch ein Rufzeichen:  "6-14 !Überstunde wegen Lieferung"
+   * Nur die Notiz, ohne Zeit, geht ebenfalls:  "!eingesprungen"
+   * Leer heißt: wie geplant – der Ist-Eintrag wird entfernt.
+   */
+  function istSetzen(j, m, name, tag, text) {
+    const roh = String(text == null ? '' : text);
+    const trenn = roh.indexOf('!');
+    const zeitTeil  = (trenn < 0 ? roh : roh.slice(0, trenn)).trim();
+    const notizTeil = (trenn < 0 ? '' : roh.slice(trenn + 1)).trim();
+
+    const p = parse(zeitTeil);
+    if (p === null) return { ok: false };              // Zeit nicht erkannt
+    const v = toStore(p);
+
+    const d = monat(j, m);
+    if (d.abschluss) return { ok: false, gesperrt: true };
+    const k = name + '|' + tag;
+    if (v) d.ist[k] = v; else delete d.ist[k];
+    if (notizTeil) d.notiz[k] = notizTeil; else delete d.notiz[k];
+    speichern(j, m, d);
+    return { ok: true, wert: v, notiz: notizTeil, anzeige: anzeigeIst(v, notizTeil) };
+  }
+
+  /** Was im Eingabefeld des Ist-Rasters stehen soll. */
+  function anzeigeIst(wert, notiz) {
+    const z = wert ? fmtLang(wert) : '';
+    return notiz ? (z ? z + ' !' + notiz : '!' + notiz) : z;
+  }
+
+  /* ---- Monatsabschluss ---------------------------------- */
+
+  const abgeschlossen = (j, m) => !!monat(j, m).abschluss;
+
+  function abschliessen(j, m) {
+    const d = monat(j, m);
+    if (d.abschluss) return false;
+    d.abschluss = { ts: Date.now() };
+    speichern(j, m, d);
+    return true;
+  }
+
+  function wiederOeffnen(j, m) {
+    const d = monat(j, m);
+    if (!d.abschluss) return false;
+    d.abschluss = null;
+    speichern(j, m, d);
+    return true;
   }
 
   function empHinzu(j, m, name) {
@@ -1086,21 +1187,58 @@ const DP = (() => {
   }
 
   /* ---- Summen ------------------------------------------- */
+  /**
+   * Monatssummen – ausnahmslos aus den Ist-Werten.
+   *
+   * Gezählt werden alle Tage, an denen entweder ein Plan ODER ein Ist
+   * steht: Ein Dienst, der nicht geplant war und trotzdem gearbeitet
+   * wurde, muss mit in die Abrechnung.
+   */
   function summen(j, m) {
     const d = monat(j, m);
+    const letzter = new Date(j, m, 0).getDate();
     const out = d.emps.map(n => {
       let h = 0, dienste = 0, url = 0, krank = 0;
-      Object.keys(d.eintraege).forEach(k => {
-        if (k.slice(0, k.lastIndexOf('|')) !== n) return;
-        const v = d.eintraege[k];
-        if (v === 'u') { url++; return; }
-        if (v === 'k') { krank++; return; }
+      for (let tag = 1; tag <= letzter; tag++) {
+        const v = istWert(d, n, tag);
+        if (!v) continue;
+        if (v === 'u') { url++; continue; }
+        if (v === 'k') { krank++; continue; }
         const st = stunden(v);
         if (st > 0) { h += st; dienste++; }
-      });
+      }
       return { name: n, stunden: h, dienste: dienste, urlaub: url, krank: krank };
     });
     out.gesamt = out.reduce((a, x) => a + x.stunden, 0);
+    return out;
+  }
+
+  /**
+   * Alle Tage eines Mitarbeiters im Monat, für die Abrechnung.
+   * Liefert Plan, Ist, Stunden und Notiz – auch die Tage ohne Abweichung,
+   * denn die Lohnverrechnung braucht den ganzen Monat, nicht nur das
+   * Besondere.
+   */
+  function tage(j, m, name) {
+    const d = monat(j, m);
+    const letzter = new Date(j, m, 0).getDate();
+    const out = [];
+    for (let tag = 1; tag <= letzter; tag++) {
+      const k = name + '|' + tag;
+      const plan = d.eintraege[k] || '';
+      const wert = istWert(d, name, tag);
+      const notiz = (d.notiz && d.notiz[k]) || '';
+      if (!plan && !wert && !notiz) continue;
+      out.push({
+        tag: tag,
+        wd: (new Date(j, m - 1, tag).getDay() + 6) % 7,
+        plan: plan,
+        wert: wert,
+        abweichung: abweichung(d, name, tag),
+        stunden: stunden(wert),
+        notiz: notiz
+      });
+    }
     return out;
   }
 
@@ -1117,16 +1255,18 @@ const DP = (() => {
    */
   function jahr(j) {
     const out = {};
-    const nimm = n => (out[n] = out[n] || { name: n, urlaub: 0, krank: 0 });
+    const nimm = n => (out[n] = out[n] || { name: n, urlaub: 0, krank: 0, stunden: 0 });
     for (let m = 1; m <= 12; m++) {
       if (!exists(j, m)) continue;
       const d = monat(j, m);
       d.emps.forEach(nimm);
-      Object.keys(d.eintraege).forEach(k => {
-        const name = k.slice(0, k.lastIndexOf('|'));
-        const v = d.eintraege[k];
-        if (v === 'u') nimm(name).urlaub++;
-        else if (v === 'k') nimm(name).krank++;
+      /* Auch hier das Ist: Wird ein geplanter Dienst nachträglich zum
+         Krankenstand, muss er im Jahreswert als Krankenstand stehen. */
+      summen(j, m).forEach(s => {
+        const e = nimm(s.name);
+        e.urlaub  += s.urlaub;
+        e.krank   += s.krank;
+        e.stunden += s.stunden;
       });
     }
     return out;
@@ -1137,6 +1277,8 @@ const DP = (() => {
 
   return { NAMEN_TAG, parse, toStore, fromStore, fmt, fmtLang, stunden, monat, exists,
            speichern, setzen, empHinzu, empEntfernen, empAnzahl, imDienst,
+           istWert, abweichung, istSetzen, anzeigeIst, tage,
+           abgeschlossen, abschliessen, wiederOeffnen,
            bloecke, summen, jahr, monatsName, key };
 })();
 
@@ -1166,13 +1308,16 @@ const PROT = (() => {
   const ARTEN = {
     aufgabe:    'Aufgabe',
     erinnerung: 'Erinnerung',
-    hinweis:    'Wichtiger Hinweis'
+    hinweis:    'Wichtiger Hinweis',
+    fahne:      'Fahne',
+    monat:      'Monatsende',
+    offen:      'Nicht bestätigt'
   };
 
   /* Arten, die nie aufgeräumt werden. Eine Quittierung „gelesen und
      verstanden" ist ein Nachweis – der ist nach neunzig Tagen nicht
      weniger wert, sondern erst dann wirklich gebraucht. */
-  const BLEIBT = { hinweis: true };
+  const BLEIBT = { hinweis: true, offen: true };
 
   const artName = a => ARTEN[a] || String(a || '–');
 
@@ -1803,7 +1948,73 @@ const ERIN = (() => {
       .sort((a, b) => (b.ueberfaellig - a.ueberfaellig) || (b.seit - a.seit));
   }
 
+  /**
+   * Nicht bestätigte Meldungen nachtragen.
+   *
+   * Eine Erinnerung, die niemand bestätigt, verschwand bisher um
+   * Mitternacht spurlos: `offen()` fragt immer nur nach dem heutigen Tag.
+   * Im Protokoll war danach nicht zu unterscheiden, ob eine Meldung
+   * erledigt wurde, gar nicht erschien oder einfach liegenblieb.
+   *
+   * Deshalb wird beim Start für jeden vergangenen Tag geprüft, was fällig
+   * war und nicht quittiert wurde, und dafür ein Eintrag „nicht bestätigt"
+   * geschrieben.
+   *
+   * Der Schlüssel ist aus Erinnerung und Datum gebildet und damit auf jedem
+   * Gerät derselbe – zwei Dashboards schreiben denselben Eintrag, nicht
+   * zwei. Gelöschte Einträge kommen nicht zurück: ein Grabstein im Speicher
+   * zählt als vorhanden.
+   *
+   * Nicht nachgetragen werden Erinnerungen mit Bedingung (die Fahne): ob
+   * sie an einem vergangenen Tag überhaupt fällig war, lässt sich
+   * nachträglich nicht mehr feststellen, und eine geratene Meldung wäre
+   * schlimmer als keine.
+   */
+  const NB_START = 'erin_nb_start';
+  const NB_TAGE  = 14;
+
+  function offenNachtragen(jetzt) {
+    const heute = jetzt || new Date();
+    /* Beim ersten Lauf nur merken, ab wann geprüft wird. Sonst stünden
+       plötzlich Wochen an „nicht bestätigt" im Buch, für eine Zeit, in der
+       es die Regel noch gar nicht gab. */
+    if (!STORE.has(NB_START)) {
+      STORE.put(NB_START, tagKey(heute));
+      return 0;
+    }
+    const ab = String(STORE.get(NB_START) || '');
+    const liste = alle().filter(e => e.aktiv !== false && !e.wenn);
+    let n = 0;
+
+    for (let zurueck = 1; zurueck <= NB_TAGE; zurueck++) {
+      const d = new Date(heute.getFullYear(), heute.getMonth(),
+                         heute.getDate() - zurueck);
+      const tk = tagKey(d);
+      if (tk < ab) continue;                       // vor der Einführung
+      liste.forEach(e => {
+        if (!amTag(e, d)) return;
+        const ab2 = minuten(e.zeit);
+        if (ab2 === null) return;
+        if (bestaetigt(e._key, d)) return;         // wurde quittiert
+        const k = 'log:nb_' + String(e._key).replace('erin:', '') + '_' + tk;
+        if (STORE.raw().items[k]) return;          // schon vermerkt oder gelöscht
+        STORE.put(k, {
+          art: 'offen',
+          was: e.text,
+          /* Zeitpunkt der Fälligkeit, damit der Eintrag im Buch an seinem
+             Tag steht und nicht am Tag des Nachtragens. */
+          ts: d.getTime() + ab2 * 60000,
+          wer: '',
+          bezug: e._key
+        });
+        n++;
+      });
+    }
+    return n;
+  }
+
   return { START, ersteinrichtung, nachtragen, alle, neu, aendern, weg, schieben, faellig,
+           offenNachtragen, tagKey,
            bestaetigen, bestaetigt, offen, amTag, minuten, alsZeit,
            imBetrieb, FRUEH, SPAET };
 })();
@@ -2496,7 +2707,7 @@ const MFEED = (() => {
    6.21.0; auf dem Telefon fehlte sie, und dann muss man raten, welche
    Fassung gerade läuft – das ist bei der Fehlersuche schon einmal
    passiert. */
-const VERSION = '2.4.0';
+const VERSION = '2.5.0';
 
 const APP = (() => {
   const DS  = ['Mo','Di','Mi','Do','Fr','Sa','So'];
