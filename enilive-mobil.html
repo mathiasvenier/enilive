@@ -1064,12 +1064,17 @@ const DP = (() => {
    * durch ein Rufzeichen:  "6-14 !Überstunde wegen Lieferung"
    * Nur die Notiz, ohne Zeit, geht ebenfalls:  "!eingesprungen"
    * Leer heißt: wie geplant – der Ist-Eintrag wird entfernt.
+   *
+   * OHNE Rufzeichen bleibt eine vorhandene Notiz unberührt. Im Raster
+   * steht nur die Zeit; eine Notiz, die man nicht sieht, darf man auch
+   * nicht aus Versehen löschen, indem man die Zeit korrigiert. Weg kommt
+   * sie mit einem Rufzeichen ohne Text.
    */
   function istSetzen(j, m, name, tag, text) {
     const roh = String(text == null ? '' : text);
     const trenn = roh.indexOf('!');
     const zeitTeil  = (trenn < 0 ? roh : roh.slice(0, trenn)).trim();
-    const notizTeil = (trenn < 0 ? '' : roh.slice(trenn + 1)).trim();
+    const notizTeil = (trenn < 0 ? null : roh.slice(trenn + 1).trim());
 
     const p = parse(zeitTeil);
     if (p === null) return { ok: false };              // Zeit nicht erkannt
@@ -1079,15 +1084,16 @@ const DP = (() => {
     if (d.abschluss) return { ok: false, gesperrt: true };
     const k = name + '|' + tag;
     if (v) d.ist[k] = v; else delete d.ist[k];
-    if (notizTeil) d.notiz[k] = notizTeil; else delete d.notiz[k];
+    if (notizTeil !== null) {
+      if (notizTeil) d.notiz[k] = notizTeil; else delete d.notiz[k];
+    }
     speichern(j, m, d);
-    return { ok: true, wert: v, notiz: notizTeil, anzeige: anzeigeIst(v, notizTeil) };
+    return { ok: true, wert: v, notiz: d.notiz[k] || '', anzeige: anzeigeIst(v) };
   }
 
-  /** Was im Eingabefeld des Ist-Rasters stehen soll. */
-  function anzeigeIst(wert, notiz) {
-    const z = wert ? fmtLang(wert) : '';
-    return notiz ? (z ? z + ' !' + notiz : '!' + notiz) : z;
+  /** Was im Eingabefeld des Ist-Rasters stehen soll: nur die Zeit. */
+  function anzeigeIst(wert) {
+    return wert ? fmtLang(wert) : '';
   }
 
   /* ---- Monatsabschluss ---------------------------------- */
