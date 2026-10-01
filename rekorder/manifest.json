@@ -1,0 +1,10 @@
+{
+  "name": "Gesprächsrekorder · Enilive Station Venier",
+  "short_name": "Rekorder",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#007BA9",
+  "theme_color": "#007BA9",
+  "icons": [{"src": "symbol.svg", "sizes": "any", "type": "image/svg+xml"}]
+}

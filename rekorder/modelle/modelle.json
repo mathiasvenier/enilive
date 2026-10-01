@@ -1,0 +1,52 @@
+{
+ "version": 1,
+ "dateien": {
+  "whisper-small-encoder.int8.onnx": {
+   "teile": [
+    "whisper-small-encoder.int8.onnx.teil00",
+    "whisper-small-encoder.int8.onnx.teil01",
+    "whisper-small-encoder.int8.onnx.teil02"
+   ],
+   "groesse": 112442483,
+   "sha256": "4cbe7b22fa9026b843b60a68640c747de05bafb1a11b57edc0e66c232d9f33a9"
+  },
+  "whisper-small-decoder.int8.onnx": {
+   "teile": [
+    "whisper-small-decoder.int8.onnx.teil00",
+    "whisper-small-decoder.int8.onnx.teil01",
+    "whisper-small-decoder.int8.onnx.teil02",
+    "whisper-small-decoder.int8.onnx.teil03",
+    "whisper-small-decoder.int8.onnx.teil04",
+    "whisper-small-decoder.int8.onnx.teil05"
+   ],
+   "groesse": 262226114,
+   "sha256": "acad50b5c782696e91b55914cc5ab4f756f1532f76e22aa6fc615f39fb69a8ee"
+  },
+  "silero_vad_v4.onnx": {
+   "teile": [
+    "silero_vad_v4.onnx"
+   ],
+   "groesse": 643854,
+   "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"
+  },
+  "wespeaker_resnet34.onnx": {
+   "teile": [
+    "wespeaker_resnet34.onnx"
+   ],
+   "groesse": 26534365,
+   "sha256": "5ef208a9da1453335308a6b6f4e6dfbd7e183a38b604de0a57664f45d257fe94"
+  },
+  "whisper-small-tokens.txt": {
+   "teile": [
+    "whisper-small-tokens.txt"
+   ],
+   "groesse": 816730
+  },
+  "whisper-small.json": {
+   "teile": [
+    "whisper-small.json"
+   ],
+   "groesse": 1724
+  }
+ }
+}

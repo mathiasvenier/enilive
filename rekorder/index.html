@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="de"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gesprächsrekorder · Enilive Station Venier</title>
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23007BA9'/%3E%3Crect x='25' y='12' width='14' height='26' rx='7' fill='white'/%3E%3Cpath d='M18 32a14 14 0 0 0 28 0' stroke='white' stroke-width='4' fill='none'/%3E%3Cpath d='M32 46v7' stroke='white' stroke-width='4'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" crossorigin="anonymous" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap">
+<style>
+:root{--t1:#2c3338;--t2:#4a5a63;--t3:#616f78;--tl:#93a1a8;--eni:#007BA9;--eni2:#0DB4E6;
+  --kante:#dbe4e8;--rot:#c62828;--gruen:#15803d}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Montserrat',system-ui,sans-serif;font-size:15px;color:var(--t1);min-height:100vh;
+  background:radial-gradient(circle at 72% 18%,#0DB4E6 0%,#007BA9 42%,#008582 100%);padding:12px}
+.kopf{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 18px;border-radius:14px;
+  background:linear-gradient(135deg,#007BA9,#0DB4E6);border:1px solid rgba(255,255,255,.25);margin-bottom:12px}
+.kopf h1{font-size:20px;font-weight:700;color:#fff;margin-right:auto}
+.kopf h1 small{display:block;font-size:11.5px;font-weight:600;opacity:.8}
+.chip{font-size:13px;font-weight:700;padding:5px 12px;border-radius:20px;background:rgba(255,255,255,.18);color:#fff}
+.chip.an{background:#e8f8ee;color:var(--gruen)}
+.chip.rot{background:#fff1f0;color:var(--rot)}
+.chip.aus{background:rgba(255,255,255,.2);color:#fff}
+button{font-family:inherit;cursor:pointer}
+.knopf{background:#fff;color:var(--eni);border:none;border-radius:9px;padding:9px 16px;font-weight:700;font-size:14px}
+.knopf.leise{background:rgba(255,255,255,.18);color:#fff;border:1px solid rgba(255,255,255,.3)}
+.raster{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px;align-items:start}
+@media(max-width:980px){.raster{grid-template-columns:1fr}}
+.karte{background:rgba(255,255,255,.97);border-radius:14px;padding:16px 18px;margin-bottom:12px}
+.ct{font-size:13px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:1.2px;
+  margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.ct .r{margin-left:auto;display:flex;gap:5px;text-transform:none;letter-spacing:0}
+.ct button{background:#eef4f7;border:1px solid #c6d6de;color:var(--eni);border-radius:7px;padding:3px 10px;font-weight:600;font-size:13px}
+.pegel{position:relative;height:18px;border-radius:9px;background:#eef2f4;overflow:hidden;margin:4px 0 6px}
+#pegel-balken{height:100%;width:0;background:linear-gradient(90deg,#9ad6ea,#0DB4E6);transition:width .2s}
+#pegel-balken.sprache{background:linear-gradient(90deg,#0DB4E6,#007BA9)}
+#pegel-grenze{position:absolute;top:0;bottom:0;width:2px;background:var(--rot);opacity:.6}
+.fakten{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13.5px;margin-top:10px}
+.fakten dt{color:var(--t3);font-weight:600}
+.fakten dd{color:var(--t1);font-weight:600}
+.ok{color:var(--gruen)} .schlecht{color:var(--rot)}
+#fehler{background:#fff1f0;border:1.5px solid #ef4444;color:#b91c1c;border-radius:9px;padding:9px 13px;
+  font-weight:600;margin-bottom:12px}
+.tagzeile{font-size:13px;color:var(--t3);margin:-4px 0 10px}
+.gs{border:1px solid #e4ebee;border-radius:11px;margin-bottom:8px;background:#fff}
+.gs[open]{border-color:#c6d6de}
+.gs summary{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 14px;cursor:pointer;list-style:none}
+.gs summary::-webkit-details-marker{display:none}
+.gs summary b{font-size:14.5px}
+.sps{display:flex;gap:5px;flex-wrap:wrap}
+.sp{font-size:11.5px;font-weight:700;color:#fff;background:var(--f);border-radius:20px;padding:2px 9px}
+.vs{flex:1 1 100%;font-size:13px;color:var(--t3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gs[open] .vs{display:none}
+.z{display:grid;grid-template-columns:62px auto 1fr auto;gap:4px 10px;padding:5px 14px;align-items:baseline;
+  font-size:14.5px;line-height:1.45;border-top:1px solid #f2f5f6}
+.zt{font-size:12px;color:var(--tl);font-variant-numeric:tabular-nums}
+.spn{background:none;border:none;font-weight:700;font-size:13px;padding:0;white-space:nowrap;text-align:left}
+.play{background:#eef4f7;border:1px solid #c6d6de;color:var(--eni);border-radius:6px;width:28px;height:24px;font-size:11px}
+.leer{font-size:14px;color:var(--t3);padding:10px 0}
+.st{display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid #f0f4f6}
+.st:last-child{border-bottom:none}
+.st .n{font-size:12.5px;color:var(--t3);margin-right:auto}
+.klein{background:var(--eni);color:#fff;border:none;border-radius:7px;padding:5px 11px;font-weight:600;font-size:12.5px}
+.klein.grau{background:#eef2f5;color:var(--t2)}
+.einst label{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13.5px;
+  padding:6px 0;border-bottom:1px solid #f0f4f6;color:var(--t2);font-weight:600}
+.einst input[type=number]{width:84px;padding:5px 8px;border:1px solid #c8d0d4;border-radius:7px;font:inherit;text-align:right}
+.einst input[type=checkbox]{width:18px;height:18px}
+.hin{font-size:12.5px;color:var(--t3);line-height:1.55;margin-top:10px}
+.fuss{font-size:11.5px;color:rgba(255,255,255,.8);text-align:right;padding:4px 4px 0}
+</style></head>
+<body>
+<div class="kopf">
+  <h1>Gesprächsrekorder<small>Enilive Station Venier · SeSt 1040</small></h1>
+  <span class="chip aus" id="st-aufnahme">○ aus</span>
+  <button class="knopf" id="knopf-aufnahme">Aufnahme starten</button>
+</div>
+<div id="fehler" style="display:none"></div>
+
+<div class="raster">
+  <div>
+    <div class="karte">
+      <div class="ct">Gespräche
+        <span class="r"><button id="tag-vor" title="Tag davor">‹</button>
+          <button id="tag-heute">Heute</button>
+          <button id="tag-nach" title="Tag danach">›</button></span></div>
+      <div class="tagzeile"><b id="tag-text"></b> · <span id="f-heute"></span></div>
+      <div id="liste"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="karte">
+      <div class="ct">Mikrofon</div>
+      <div class="pegel"><div id="pegel-balken"></div><div id="pegel-grenze" title="Mindestpegel"></div></div>
+      <div style="font-size:12.5px;color:var(--t3)">Pegel <b id="pegel-text">–</b> · rote Linie = Mindestpegel</div>
+      <dl class="fakten">
+        <dt>Gerät</dt><dd id="f-geraet">–</dd>
+        <dt>Warteschlange</dt><dd id="f-warte">0</dd>
+        <dt>Zu leise verworfen</dt><dd id="f-leise">0</dd>
+        <dt>Modelle</dt><dd id="f-modell">–</dd>
+        <dt>Mehrkern</dt><dd id="f-iso">–</dd>
+        <dt>Tempo</dt><dd id="f-tempo">–</dd>
+        <dt>Dashboard</dt><dd id="f-bruecke">–</dd>
+        <dt>Drive</dt><dd id="f-drive">–</dd>
+      </dl>
+    </div>
+
+    <div class="karte">
+      <div class="ct">Heute erkannt</div>
+      <div id="unbekannt"></div>
+      <div class="ct" style="margin-top:16px">Angelernte Stimmen</div>
+      <div id="stimmen"></div>
+      <p class="hin">Eine Stimme benennen, und sie wird ab dann wiedererkannt. Ein falsch
+        zugeordneter Eintrag lässt sich über den Namen davor korrigieren – das lernt die
+        Stimme bewusst nicht mit.</p>
+    </div>
+
+    <div class="karte einst">
+      <div class="ct">Einstellungen</div>
+      <label>Beim Öffnen sofort aufnehmen <input type="checkbox" data-e="autostart"></label>
+      <label>Rauschunterdrückung <input type="checkbox" data-e="rauschfilter"></label>
+      <label>Mindestpegel (dBFS) <input type="number" step="1" min="-80" max="-20" data-e="minPegel"></label>
+      <label>Neues Gespräch nach (s Stille) <input type="number" step="5" min="10" max="600" data-e="pause"></label>
+      <label>Bekannte Stimme ab <input type="number" step="0.01" min="0.2" max="0.95" data-e="schwelleBekannt"></label>
+      <label>Gleiche unbekannte ab <input type="number" step="0.01" min="0.2" max="0.95" data-e="schwelleUnbekannt"></label>
+      <label>Audio aufheben (Tage) <input type="number" step="1" min="1" max="60" data-e="aufbewahrung"></label>
+      <label>Rechenkerne (0 = auto) <input type="number" step="1" min="0" max="16" data-e="threads"></label>
+      <p class="hin">Mindestpegel: Was leiser ankommt, wird gar nicht erst verschriftet –
+        damit lässt sich das Radio im Hintergrund ausblenden. Wert so wählen, dass die rote
+        Linie knapp über dem Ausschlag bei Radio und Ofen liegt.</p>
+      <p class="hin">Audio bleibt nur in diesem Browser und wird nach der eingestellten Zeit
+        gelöscht. Nach Google Drive geht ausschließlich der Text.</p>
+      <div style="margin-top:12px"><button class="klein grau" id="knopf-test">Selbsttest über den Lautsprecher</button></div>
+    </div>
+  </div>
+</div>
+<div class="fuss">Rekorder <span id="version"></span> · Whisper small (k2-fsa/sherpa-onnx) · ONNX Runtime Web</div>
+<script type="module" src="./app.js"></script>
+</body></html>
