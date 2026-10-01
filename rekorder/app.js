@@ -569,6 +569,26 @@ async function start() {
   const threads = E.threads || (Z.isoliert ? Math.max(1, Math.min(4, kerne - 2)) : 1);
   arbeitW.postMessage({ art: 'laden', threads });
 
+  /* Tarn-Modus: Das App-Fenster zeigt im Betrieb nur den Enilive-Verlauf,
+     damit es im Geschäft nicht auffällt. Der Rekorder läuft dahinter voll
+     weiter – nur die Oberfläche ist verdeckt. Strg+Alt+V holt sie hervor,
+     dieselbe Geste wie die Verwaltung im Dashboard. Nach einem Neustart ist
+     wieder getarnt. */
+  const KLEIN = [360, 240], GROSS = [1180, 860];
+  const tarnen = (an) => {
+    document.body.classList.toggle('tarn', an);
+    try { if (an) { window.resizeTo(KLEIN[0], KLEIN[1]); } else { window.resizeTo(GROSS[0], GROSS[1]); } } catch (_) {}
+  };
+  tarnen(true);
+  window.addEventListener('keydown', e => {
+    if (e.ctrlKey && e.altKey && (e.key === 'v' || e.key === 'V')) {
+      e.preventDefault();
+      const jetztGetarnt = document.body.classList.contains('tarn');
+      tarnen(!jetztGetarnt);
+      if (jetztGetarnt) zeichnen(true);   // wird sichtbar: Anzeige auffrischen
+    }
+  });
+
   /* Bedienung */
   $('#knopf-aufnahme').onclick = () => Z.aufnahme ? aufnahmeStoppen() : aufnahmeStarten();
   $('#knopf-test').onclick = selbsttest;
