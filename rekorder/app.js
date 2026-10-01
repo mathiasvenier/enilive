@@ -20,7 +20,7 @@
 import * as DB from './speicher.js';
 import { erfunden } from './whisper.js';
 
-const VERSION = '1.0.0';
+const VERSION = '1.0.1';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -556,7 +556,9 @@ async function start() {
     if (m.art === 'fehler' && !m.id) { Z.fehler = 'Modelle: ' + m.text; zeichnen(); }
   });
   const kerne = navigator.hardwareConcurrency || 4;
-  const threads = E.threads || (Z.isoliert ? Math.max(1, Math.min(8, kerne - 2)) : 1);
+  /* Gemessen am Kassen-PC (12 Kerne): 4 Threads sind schneller als 8 –
+     und lassen der Kasse Luft. */
+  const threads = E.threads || (Z.isoliert ? Math.max(1, Math.min(4, kerne - 2)) : 1);
   arbeitW.postMessage({ art: 'laden', threads });
 
   /* Bedienung */
