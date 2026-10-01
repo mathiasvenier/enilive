@@ -20,7 +20,7 @@
 import * as DB from './speicher.js';
 import { erfunden } from './whisper.js';
 
-const VERSION = '1.0.1';
+const VERSION = '1.0.2';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -510,23 +510,15 @@ async function einstellungSetzen(el) {
 /* ---- Selbsttest über den Lautsprecher des Jabra ----
    Die Windows-Stimmen sprechen deutsche Sätze, das Mikrofon hört
    sie. Prüft die ganze Kette, ohne dass jemand reden muss. */
-async function selbsttest() {
-  const st = speechSynthesis.getVoices().filter(v => /^de/i.test(v.lang));
-  if (!st.length) { alert('Keine deutsche Windows-Stimme gefunden.'); return; }
-  const saetze = [
-    'Grüß Gott, einmal volltanken bitte, Super an Säule drei.',
-    'Gerne. Das macht dann vierundsechzig Euro zwanzig. Mit Karte oder bar?',
-    'Mit Karte, und noch einen großen Kaffee zum Mitnehmen.'
-  ];
-  for (let i = 0; i < saetze.length; i++) {
-    await new Promise(ok => {
-      const u = new SpeechSynthesisUtterance(saetze[i]);
-      u.voice = st[i % st.length]; u.lang = u.voice.lang; u.rate = 0.95;
-      u.onend = ok; u.onerror = ok;
-      speechSynthesis.speak(u);
-    });
-    await new Promise(ok => setTimeout(ok, 1500));
-  }
+/* Sprechprobe. Eine Ansage über den Lautsprecher taugt dafür nicht:
+   Der Jabra rechnet sein eigenes Lautsprechersignal aus dem Mikrofon
+   heraus (am Kassen-PC gemessen: Pegel bleibt bei -110 dB). Also
+   spricht ein Mensch, und die Seite zeigt, was angekommen ist. */
+function selbsttest() {
+  const k = $('#knopf-test');
+  if (!Z.aufnahme) { k.textContent = 'Erst die Aufnahme starten'; setTimeout(() => k.textContent = 'Sprechprobe', 4000); return; }
+  k.textContent = 'Jetzt einen Satz sprechen – erscheint oben in der Liste';
+  setTimeout(() => k.textContent = 'Sprechprobe', 15000);
 }
 
 /* ============================================================
