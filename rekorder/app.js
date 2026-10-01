@@ -20,7 +20,7 @@
 import * as DB from './speicher.js';
 import { erfunden } from './whisper.js';
 
-const VERSION = '1.0.2';
+const VERSION = '1.0.3';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
   .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -528,6 +528,22 @@ async function start() {
   $('#version').textContent = VERSION;
   await isolation();
   Z.isoliert = self.crossOriginIsolated;
+
+  /* Nur ein Rekorder je Rechner. Zwei offene Fenster nähmen jedes
+     Gespräch doppelt auf. Das zweite wartet und übernimmt, sobald das
+     erste geschlossen wird. */
+  const frei = await new Promise(ok => navigator.locks.request('eni-rekorder', { ifAvailable: true },
+    l => { ok(!!l); return l ? new Promise(() => {}) : undefined; }));
+  if (!frei) {
+    const f = $('#fehler');
+    f.textContent = 'Der Rekorder läuft bereits in einem anderen Fenster. Dieses hier wartet ' +
+      'und übernimmt, sobald das andere geschlossen wird.';
+    f.style.display = '';
+    $('#knopf-aufnahme').disabled = true;
+    await new Promise(ok => navigator.locks.request('eni-rekorder', () => { ok(); return new Promise(() => {}); }));
+    f.style.display = 'none'; $('#knopf-aufnahme').disabled = false;
+  }
+
   E = Object.assign({}, STANDARD, await DB.kvGet('einstellungen', {}));
   einstellungenZeigen();
 
