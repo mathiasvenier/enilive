@@ -282,6 +282,28 @@ async function eintragUmbenennen(id) {
   zeichnen(true);
 }
 
+/* Einen einzelnen Eintrag löschen – Text und Audio. Die Tagesdatei wird
+   neu geschrieben und in Drive ersetzt, der Eintrag verschwindet also
+   auch dort. */
+async function eintragLoeschen(id) {
+  const a = await DB.get('abschnitt', id);
+  if (!a) return;
+  if (!confirm('Diesen Eintrag löschen?\n\n„' + (a.text || '').slice(0, 80) + '"\n\nText und Tonaufnahme werden entfernt, auch aus Drive.')) return;
+  await DB.del('abschnitt', id);
+  tagGeaendert(a.datum);
+  zeichnen(true);
+}
+
+/* Ein ganzes Gespräch löschen – alle Einträge mit dieser Nummer. */
+async function gespraechLoeschen(gid, datum) {
+  const l = (await DB.nach('abschnitt', 'datum', datum)).filter(a => a.gid === gid);
+  if (!l.length) return;
+  if (!confirm('Das ganze Gespräch löschen?\n\n' + l.length + ' Einträge, auch die Tonaufnahmen, werden entfernt – auch aus Drive.')) return;
+  for (const a of l) await DB.del('abschnitt', a.id);
+  tagGeaendert(datum);
+  zeichnen(true);
+}
+
 /* ============================================================
    Audio: Opus für die zehn Tage, die es aufgehoben wird
    ============================================================ */
@@ -466,12 +488,14 @@ async function listeZeichnen() {
     return `<details class="gs" data-gid="${gid}"${offen ? ' open' : ''}><summary>
         <b>${uhr(l[0].t0, false)}–${uhr(l[l.length - 1].t1, false)}</b>
         <span class="sps">${sp.map(s => `<span class="sp" style="--f:${farbe(s)}">${esc(s)}</span>`).join('')}</span>
-        <span class="vs">${esc(l[0].text).slice(0, 80)}</span></summary>
+        <span class="vs">${esc(l[0].text).slice(0, 80)}</span>
+        <button class="weg" data-weg-g="${gid}" data-weg-d="${tag}" title="Gespräch löschen">✕</button></summary>
       ${l.map(a => `<div class="z"><span class="zt">${uhr(a.t0)}</span>
         <button class="spn" style="color:${farbe(a.sprecher)}" data-umbenennen="${a.id}"
           title="Sprecher ändern">${esc(a.sprecher || '–')}</button>
         <span class="tx">${esc(a.text)}</span>
-        ${a.audio ? `<button class="play" data-play="${a.id}" title="Anhören">▶</button>` : ''}</div>`).join('')}
+        ${a.audio ? `<button class="play" data-play="${a.id}" title="Anhören">▶</button>` : '<span></span>'}
+        <button class="weg" data-weg="${a.id}" title="Eintrag löschen">✕</button></div>`).join('')}
     </details>`;
   }).join('') : '<div class="leer">Noch keine Gespräche an diesem Tag.</div>';
 
@@ -596,12 +620,14 @@ async function start() {
   $('#tag-nach').onclick = () => { Z.tag = tagVon(new Date(Z.tag + 'T12:00').getTime() + 864e5); Z.offen.clear(); zeichnen(true); };
   $('#tag-heute').onclick = () => { Z.tag = tagVon(Date.now()); Z.offen.clear(); zeichnen(true); };
   document.addEventListener('click', ev => {
-    const t = ev.target.closest('[data-play],[data-benennen],[data-vergessen],[data-umbenennen]');
+    const t = ev.target.closest('[data-play],[data-benennen],[data-vergessen],[data-umbenennen],[data-weg],[data-weg-g]');
     if (!t) return;
     if (t.dataset.play) abspielen(t.dataset.play);
     if (t.dataset.benennen) benennen(t.dataset.benennen);
     if (t.dataset.vergessen) stimmeLoeschen(t.dataset.vergessen);
     if (t.dataset.umbenennen) eintragUmbenennen(t.dataset.umbenennen);
+    if (t.dataset.weg) eintragLoeschen(t.dataset.weg);
+    if (t.dataset.wegG) { ev.preventDefault(); gespraechLoeschen(t.dataset.wegG, t.dataset.wegD); }
   });
   document.addEventListener('toggle', ev => {
     const d = ev.target; if (!d.dataset || !d.dataset.gid) return;
