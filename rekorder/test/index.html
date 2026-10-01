@@ -1,0 +1,22 @@
+<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><title>Rekorder · Tempotest</title>
+<style>body{font-family:Montserrat,system-ui,sans-serif;padding:20px;color:#2c3338}pre{background:#eef4f7;padding:12px;border-radius:9px}</style></head>
+<body><h2 style="color:#007BA9">Rekorder · Tempotest</h2><pre id="aus">läuft …</pre>
+<script type="module">
+/* Misst Whisper + Stimmabdruck mit einer festen Probe (6,6 s, englisch).
+   Aufruf: test/?t=8  (t = Rechenkerne). Ergebnis auch in window.ERGEBNIS. */
+const aus = document.getElementById('aus');
+const log = s => { aus.textContent += '\n' + s; };
+const t = +(new URLSearchParams(location.search).get('t') || 8);
+log('isoliert: ' + self.crossOriginIsolated + ' · Kerne: ' + navigator.hardwareConcurrency + ' · Threads: ' + t);
+const pcm = new Float32Array(await (await fetch('./probe.f32')).arrayBuffer());
+const w = new Worker('../verarbeitung.js', { type: 'module' });
+const erg = [];
+w.onmessage = ev => {
+  const m = ev.data;
+  if (m.art === 'bereit') { log('Modelle bereit in ' + m.ms + ' ms, threads ' + m.threads); los(); }
+  if (m.art === 'ergebnis') { erg.push(m.ms); log(JSON.stringify(m.ms) + ' · ' + m.text); if (erg.length < 3) los(); else { window.ERGEBNIS = erg; log('fertig'); } }
+  if (m.art === 'fehler') log('FEHLER ' + m.text);
+};
+function los() { const p = pcm.slice(); w.postMessage({ art: 'auftrag', id: 'x', pcm: p, sprache: 'en' }, [p.buffer]); }
+w.postMessage({ art: 'laden', threads: t });
+</script></body></html>
