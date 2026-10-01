@@ -323,13 +323,10 @@ async function opus(pcm) {
   } catch (_) { return null; }
 }
 
-let abspieler = null;
-async function abspielen(id) {
-  const a = await DB.get('abschnitt', id);
-  if (!a || !a.audio) { alert('Für diesen Eintrag ist kein Audio mehr da.'); return; }
-  const ctx = abspieler || (abspieler = new AudioContext({ sampleRate: 16000 }));
-  await ctx.resume();
-  const out = new Float32Array(a.audio.laenge + 16000);
+/* Opus-Pakete eines Abschnitts zurück zu PCM dekodieren. */
+async function pcmVon(audio) {
+  if (!audio) return null;
+  const out = new Float32Array(audio.laenge + 16000);
   let p = 0;
   await new Promise(ok => {
     const dec = new AudioDecoder({
@@ -338,12 +335,49 @@ async function abspielen(id) {
       error: () => ok()
     });
     dec.configure({ codec: 'opus', sampleRate: 16000, numberOfChannels: 1 });
-    for (const k of a.audio.pakete) dec.decode(new EncodedAudioChunk({ type: 'key', timestamp: k.t, duration: k.d, data: k.b }));
+    for (const k of audio.pakete) dec.decode(new EncodedAudioChunk({ type: 'key', timestamp: k.t, duration: k.d, data: k.b }));
     dec.flush().then(() => { dec.close(); ok(); }, () => ok());
   });
-  const ab = ctx.createBuffer(1, Math.max(1, p), 16000);
-  ab.copyToChannel(out.subarray(0, p), 0);
+  return out.subarray(0, p);
+}
+
+let abspieler = null;
+async function abspielen(id) {
+  const a = await DB.get('abschnitt', id);
+  if (!a || !a.audio) { alert('Für diesen Eintrag ist kein Audio mehr da.'); return; }
+  const pcm = await pcmVon(a.audio);
+  const ctx = abspieler || (abspieler = new AudioContext({ sampleRate: 16000 }));
+  await ctx.resume();
+  const ab = ctx.createBuffer(1, Math.max(1, pcm.length), 16000);
+  ab.copyToChannel(pcm, 0);
   const q = ctx.createBufferSource(); q.buffer = ab; q.connect(ctx.destination); q.start();
+}
+
+/* PCM als 16-Bit-WAV verpacken – das spielt jedes Gerät, auch das iPhone.
+   Rückgabe als base64, damit es durch die Brücke und den GM-Speicher passt. */
+function wavBase64(pcm) {
+  const n = pcm.length, sr = 16000;
+  const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
+  v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  str(36, 'data'); v.setUint32(40, n * 2, true);
+  let o = 44;
+  for (let i = 0; i < n; i++) { let x = Math.max(-1, Math.min(1, pcm[i])); v.setInt16(o, x < 0 ? x * 32768 : x * 32767, true); o += 2; }
+  const u = new Uint8Array(buf); let bin = '';
+  for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+/* Das Dashboard bittet im Auftrag des Handys um den Ton eines Eintrags. */
+async function tonLiefern(id) {
+  const a = await DB.get('abschnitt', id);
+  if (!a || !a.audio) { brueckeSenden('tonFehler', { id, text: 'kein Ton mehr vorhanden' }); return; }
+  try {
+    const pcm = await pcmVon(a.audio);
+    brueckeSenden('ton', { id, datum: a.datum, b64: wavBase64(pcm) });
+  } catch (e) { brueckeSenden('tonFehler', { id, text: String(e && e.message || e) }); }
 }
 
 /* ============================================================
@@ -358,7 +392,7 @@ async function tagesdatei(datum) {
     const sp = []; l.forEach(a => { if (a.sprecher && sp.indexOf(a.sprecher) < 0) sp.push(a.sprecher); });
     const b = l[0].t0, e = l[l.length - 1].t1;
     return { id: gid, beginn: isoLokal(b), ende: isoLokal(e), dauer_s: Math.round((e - b) / 1000),
-             sprecher: sp, eintraege: l.map(a => ({ zeit: uhr(a.t0), sprecher: a.sprecher || '', text: a.text })) };
+             sprecher: sp, eintraege: l.map(a => ({ id: a.id, zeit: uhr(a.t0), sprecher: a.sprecher || '', text: a.text, ton: !!a.audio })) };
   });
   return { format: 'gespraechsrekorder-tag/1', datum, quelle: 'browser-rekorder ' + VERSION,
            erzeugt: isoLokal(Date.now()), gespraeche };
@@ -390,6 +424,7 @@ window.addEventListener('message', async ev => {
   if (!m || !m.eniRekorderAntwort || ev.source !== window) return;
   if (m.art === 'bruecke') { Z.bruecke = { version: m.version, ts: Date.now() }; zeichnen(); nachreichen(); }
   if (m.art === 'hoch') { Z.hoch = m.hoch || {}; zeichnen(); }
+  if (m.art === 'tonbitte' && m.id) tonLiefern(m.id);
 });
 
 /* Was noch nicht in Drive angekommen ist, erneut anbieten. */
@@ -402,6 +437,10 @@ async function nachreichen() {
     if (st && (!h || h.stand < st)) geaenderteTage.add(d);
   }
   if (geaenderteTage.size) { clearTimeout(sendeTimer); sendeTimer = setTimeout(senden, 2000); }
+}
+
+function brueckeSenden(art, d) {
+  window.postMessage(Object.assign({ eniRekorder: 1, art }, d || {}), location.origin);
 }
 
 function herzschlag() {

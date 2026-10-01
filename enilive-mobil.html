@@ -259,6 +259,25 @@ body{
 .hw-neu{margin-top:14px;width:100%;padding:13px;border:none;border-radius:10px;
   background:#e8590c;color:#fff;font:700 15.5px 'Montserrat',sans-serif}
 
+/* ---- Gespräche --------------------------------------- */
+.gm-nav{display:flex;align-items:center;gap:8px;margin-bottom:11px}
+.gm-nav button{background:#eef4f7;border:1px solid #c6d6de;color:var(--eni);
+  width:38px;height:38px;border-radius:10px;font-size:18px;font-family:inherit}
+.gm-nav select{flex:1;font:inherit;font-size:14px;padding:8px;border:1px solid #c8d0d4;border-radius:9px;background:#fff;color:var(--t1)}
+.gm-g{border:1px solid #e4ebee;border-radius:11px;margin-bottom:8px;overflow:hidden}
+.gm-k{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:10px 12px;background:#f7fafb;cursor:pointer}
+.gm-k b{font-size:14px;font-variant-numeric:tabular-nums}
+.gm-sp{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto}
+.gm-s{font-size:11px;font-weight:700;color:#fff;border-radius:20px;padding:2px 8px}
+.gm-z{padding:7px 12px;border-top:1px solid #f2f5f6;display:grid;grid-template-columns:50px 1fr;gap:3px 9px}
+.gm-zt{font-size:12px;color:var(--tl);font-variant-numeric:tabular-nums}
+.gm-sn{font-size:12.5px;font-weight:700}
+.gm-tx{grid-column:2;font-size:14.5px;line-height:1.45}
+.gm-ton{grid-column:2;margin-top:3px}
+.gm-ton button{font-size:12.5px;font-weight:600;color:var(--eni);background:#eef4f7;
+  border:1px solid #c6d6de;border-radius:7px;padding:4px 11px;font-family:inherit}
+.gm-ton audio{width:100%;max-width:280px;height:34px;margin-top:3px}
+.gm-ton .warte{font-size:12.5px;color:var(--t3)}
 </style>
 </head>
 <body>
@@ -2700,6 +2719,140 @@ const MFEED = (() => {
   };
 })();
 
+/* ===== mg60-gespraeche.js ===== */
+/* ============================================================
+   GESPRÄCHE (mobil) – Mitschriften vom Kassen-PC ansehen
+   ------------------------------------------------------------
+   Liest dieselben Tagesdateien aus „Enilive Dashboard/Gespraeche“,
+   die der Rekorder ablegt. Nur lesen – geschrieben wird nichts,
+   außer einer Ton-Anfrage: Tippt Mathias bei einem Eintrag auf
+   „Ton holen“, wird in Drive eine Bitte hinterlegt. Der Kassen-PC
+   wandelt genau diese eine Aufnahme um und legt sie als WAV nach
+   Drive; hier wird dann darauf gewartet und abgespielt.
+
+   Der Ton bleibt am Kassen-PC, bis er einzeln angefordert wird.
+   ============================================================ */
+const GESPRM = (() => {
+  const API = 'https://www.googleapis.com/drive/v3';
+  const UPL = 'https://www.googleapis.com/upload/drive/v3';
+  const HAUPT = 'Enilive Dashboard', ORDNER = 'Gespraeche', AUDIO = 'audio';
+  const ANFRAGEN = 'audio-anfragen.json';
+
+  const hoerer = [];
+  const tell = () => hoerer.forEach(f => { try { f(); } catch (_) {} });
+
+  let gId = null, auId = null;
+  let tage = [], tag = '', doc = null, fehler = '', laedt = false, geladen = false;
+  const toene = {};   // eintrag-id -> { status:'warte'|'da'|'fehler', url?, text? }
+
+  const tok = () => (typeof DRIVE !== 'undefined' && DRIVE.zugang) ? DRIVE.zugang() : null;
+  async function ruf(u, o) {
+    const t = tok();
+    if (!t) throw new Error('nicht angemeldet');
+    const r = await fetch(u, Object.assign({ headers: { Authorization: 'Bearer ' + t } }, o || {}));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r;
+  }
+  async function files(q) {
+    const r = await ruf(API + '/files?q=' + encodeURIComponent(q + ' and trashed=false') +
+      '&fields=files(id,name)&pageSize=200&orderBy=name desc');
+    return (await r.json()).files || [];
+  }
+  async function ordner() {
+    if (gId) return gId;
+    const h = await files("name='" + HAUPT + "' and mimeType='application/vnd.google-apps.folder'");
+    for (const x of h) {
+      const u = await files("name='" + ORDNER + "' and '" + x.id + "' in parents and mimeType='application/vnd.google-apps.folder'");
+      if (u.length) return (gId = u[0].id);
+    }
+    throw new Error('Ordner „' + ORDNER + '“ nicht gefunden');
+  }
+  async function audioOrdner() {
+    if (auId) return auId;
+    const o = await ordner();
+    const u = await files("name='" + AUDIO + "' and '" + o + "' in parents and mimeType='application/vnd.google-apps.folder'");
+    return (auId = u.length ? u[0].id : null);
+  }
+
+  /** Liste der Tage und, wenn möglich, den aktuellen Tag laden. */
+  async function laden() {
+    if (laedt || !tok()) return;
+    laedt = true; fehler = ''; tell();
+    try {
+      const o = await ordner();
+      const fs = await files("'" + o + "' in parents and mimeType='application/json'");
+      tage = fs.filter(f => /^\d{4}-\d{2}-\d{2}\.json$/.test(f.name))
+        .map(f => ({ datum: f.name.slice(0, 10), id: f.id }))
+        .sort((a, b) => b.datum.localeCompare(a.datum));
+      if (!tage.find(t => t.datum === tag)) tag = tage.length ? tage[0].datum : '';
+      if (tag) await tagLaden(); else doc = null;
+      geladen = true;
+    } catch (e) { fehler = String(e && e.message || e); }
+    finally { laedt = false; tell(); }
+  }
+
+  async function tagLaden() {
+    const t = tage.find(x => x.datum === tag);
+    doc = null;
+    if (!t) return;
+    try { doc = await (await ruf(API + '/files/' + t.id + '?alt=media')).json(); }
+    catch (e) { fehler = String(e && e.message || e); }
+  }
+
+  async function zuTag(datum) {
+    tag = datum; fehler = ''; tell();
+    try { await tagLaden(); } catch (e) { fehler = String(e && e.message || e); }
+    tell();
+  }
+
+  /** Ton eines Eintrags anfordern und auf die WAV-Datei warten. */
+  async function tonHolen(id) {
+    if (!/^a[0-9a-z]+$/.test(id || '')) return;
+    toene[id] = { status: 'warte' }; tell();
+    try {
+      const o = await ordner();
+      const af = await files("name='" + ANFRAGEN + "' and '" + o + "' in parents");
+      let anf = {}, afId = af.length ? af[0].id : null;
+      if (afId) { try { anf = await (await ruf(API + '/files/' + afId + '?alt=media')).json() || {}; } catch (_) {} }
+      anf[id] = { datum: tag, ts: Date.now() };
+      if (afId) {
+        await ruf(UPL + '/files/' + afId + '?uploadType=media', { method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(anf) });
+      } else {
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify({ name: ANFRAGEN, parents: [o], mimeType: 'application/json' })],
+          { type: 'application/json' }));
+        form.append('file', new Blob([JSON.stringify(anf)], { type: 'application/json' }));
+        await ruf(UPL + '/files?uploadType=multipart&fields=id', { method: 'POST', body: form });
+      }
+      const bis = Date.now() + 6 * 60 * 1000;
+      const t = setInterval(async () => {
+        try {
+          const au = await audioOrdner();
+          if (au) {
+            const w = await files("name='" + id + ".wav' and '" + au + "' in parents");
+            if (w.length) {
+              clearInterval(t);
+              const blob = await (await ruf(API + '/files/' + w[0].id + '?alt=media')).blob();
+              toene[id] = { status: 'da', url: URL.createObjectURL(blob) };
+              tell(); return;
+            }
+          }
+        } catch (_) {}
+        if (Date.now() > bis) { clearInterval(t); toene[id] = { status: 'fehler', text: 'Zeitüberschreitung' }; tell(); }
+      }, 8000);
+    } catch (e) { toene[id] = { status: 'fehler', text: String(e && e.message || e) }; tell(); }
+  }
+
+  return {
+    laden, zuTag, tonHolen,
+    tage: () => tage, tag: () => tag, doc: () => doc,
+    fehler: () => fehler, laedt: () => laedt, geladen: () => geladen,
+    ton: (id) => toene[id] || null,
+    aufAenderung: (f) => hoerer.push(f)
+  };
+})();
+
 /* ===== m70-mobil-app.js ===== */
 /* ============================================================
    OBERFLÄCHE (mobil)
@@ -2713,7 +2866,7 @@ const MFEED = (() => {
    6.21.0; auf dem Telefon fehlte sie, und dann muss man raten, welche
    Fassung gerade läuft – das ist bei der Fehlersuche schon einmal
    passiert. */
-const VERSION = '2.5.0';
+const VERSION = '2.6.0';
 
 const APP = (() => {
   const DS  = ['Mo','Di','Mi','Do','Fr','Sa','So'];
@@ -2735,6 +2888,7 @@ const APP = (() => {
     { id:'dienst',ic:'👥', lb:'Dienst' },
     { id:'notiz', ic:'✎',  lb:'Notizen' },
     { id:'hw',    ic:'❗', lb:'Hinweise' },
+    { id:'gespr', ic:'🎙', lb:'Gespräche' },
     { id:'prot',  ic:'📖', lb:'Protokoll' }
   ];
 
@@ -3151,12 +3305,66 @@ const APP = (() => {
     </div>`;
   }
 
+  /* ---- Gespräche ----------------------------------------- */
+  function gmFarbe(name) {
+    if (!name) return '#7a8890';
+    let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+    return 'hsl(' + h + ',55%,42%)';
+  }
+  let gmOffen = null;   // welches Gespräch ist aufgeklappt
+
+  function seiteGespr() {
+    if (DRIVE.zustand() === 'offline')
+      return `<div class="karte"><div class="leer">Nicht mit Drive verbunden.</div></div>`;
+    if (!GESPRM.geladen() && !GESPRM.laedt()) setTimeout(() => GESPRM.laden(), 0);
+    const tage = GESPRM.tage(), tag = GESPRM.tag(), doc = GESPRM.doc();
+    if (GESPRM.laedt() && !doc) return `<div class="karte"><div class="leer">Wird geladen …</div></div>`;
+    if (GESPRM.fehler()) return `<div class="karte"><div class="leer">${esc(GESPRM.fehler())}</div></div>`;
+    if (!tage.length) return `<div class="karte"><div class="leer">Noch keine Gespräche vorhanden.</div></div>`;
+
+    const i = tage.findIndex(t => t.datum === tag);
+    const optionen = tage.map(t => `<option value="${t.datum}"${t.datum === tag ? ' selected' : ''}>${
+      esc(new Date(t.datum + 'T12:00').toLocaleDateString('de-AT',
+        { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }))}</option>`).join('');
+    const nav = `<div class="gm-nav">
+      <button onclick="APP.gesprTag('${(tage[i + 1] || {}).datum || ''}')"${i >= tage.length - 1 ? ' disabled' : ''}>‹</button>
+      <select onchange="APP.gesprTag(this.value)">${optionen}</select>
+      <button onclick="APP.gesprTag('${(tage[i - 1] || {}).datum || ''}')"${i <= 0 ? ' disabled' : ''}>›</button></div>`;
+
+    const gespr = (doc && doc.gespraeche) || [];
+    if (gmOffen === null && gespr.length) gmOffen = gespr[0].id;
+    const liste = gespr.length ? gespr.map(g => {
+      const sp = (g.sprecher || []);
+      const kopf = `<div class="gm-k" onclick="APP.gesprAuf('${esc(g.id)}')">
+        <b>${esc((g.eintraege[0] || {}).zeit || '')}</b>
+        <span class="gm-sp">${sp.map(s => `<span class="gm-s" style="background:${gmFarbe(s)}">${esc(s)}</span>`).join('')}</span></div>`;
+      if (gmOffen !== g.id) return `<div class="gm-g">${kopf}</div>`;
+      const zeilen = (g.eintraege || []).map(e => {
+        const t = e.id ? GESPRM.ton(e.id) : null;
+        let ton = '';
+        if (e.ton && e.id) {
+          if (t && t.status === 'da') ton = `<div class="gm-ton"><audio controls src="${t.url}"></audio></div>`;
+          else if (t && t.status === 'warte') ton = `<div class="gm-ton"><span class="warte">Ton wird vom Kassen-PC geholt … (kann ein paar Minuten dauern)</span></div>`;
+          else if (t && t.status === 'fehler') ton = `<div class="gm-ton"><span class="warte">Ton nicht verfügbar${t.text ? ' (' + esc(t.text) + ')' : ''}.</span> <button onclick="APP.gesprTon('${esc(e.id)}')">Nochmal</button></div>`;
+          else ton = `<div class="gm-ton"><button onclick="APP.gesprTon('${esc(e.id)}')">Ton holen</button></div>`;
+        }
+        return `<div class="gm-z"><span class="gm-zt">${esc(e.zeit || '')}</span>
+          <span class="gm-sn" style="color:${gmFarbe(e.sprecher)}">${esc(e.sprecher || '–')}</span>
+          <span class="gm-tx">${esc(e.text || '')}</span>${ton}</div>`;
+      }).join('');
+      return `<div class="gm-g">${kopf}${zeilen}</div>`;
+    }).join('') : '<div class="leer">An diesem Tag nichts aufgezeichnet.</div>';
+
+    return `<div id="buehne"><div class="karte"><div class="kt">Gespräche</div>${nav}${liste}</div></div>`;
+  }
+
   /* ---- Aufbau -------------------------------------------- */
   const seite = id => id === 'heute'  ? seiteHeute()
                     : id === 'plan'   ? seitePlan()
                     : id === 'dienst' ? seiteDienst()
                     : id === 'notiz'  ? seiteNotiz()
                     : id === 'hw'     ? seiteHinweis()
+                    : id === 'gespr'  ? seiteGespr()
                     :                   seiteProt();
 
   /* Wird gerade getippt? Dann kein Neuaufbau – sonst verschwindet der Text. */
@@ -3240,6 +3448,7 @@ const APP = (() => {
       DRIVE.aufZustand(z => { if (z === 'online') NOTIZ.start(); bauen(); });
       NOTIZ.aufAenderung(bauen);
       MFEED.aufAenderung(bauen);
+      GESPRM.aufAenderung(bauen);
       DRIVE.init();
       MFEED.start();
       bauen();
@@ -3249,6 +3458,9 @@ const APP = (() => {
     },
 
     zeige(id) { aktiv = id; window.scrollTo(0, 0); bauen(); },
+    gesprTag(d) { if (d) { gmOffen = null; GESPRM.zuTag(d); } },
+    gesprAuf(id) { gmOffen = (gmOffen === id ? null : id); bauen(); },
+    gesprTon(id) { GESPRM.tonHolen(id); },
     wachsen(el) { hoehe(el); },
     verbinden() { DRIVE.neuVerbinden(); },
     preiseJetzt() { MFEED.abrufen(true); bauen(); },
