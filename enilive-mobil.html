@@ -2877,7 +2877,7 @@ const GESPRM = (() => {
    6.21.0; auf dem Telefon fehlte sie, und dann muss man raten, welche
    Fassung gerade läuft – das ist bei der Fehlersuche schon einmal
    passiert. */
-const VERSION = '2.7.0';
+const VERSION = '2.7.1';
 
 const APP = (() => {
   const DS  = ['Mo','Di','Mi','Do','Fr','Sa','So'];
@@ -3321,6 +3321,8 @@ const APP = (() => {
      und, wenn unbekannt, „Sprecher A/B/C“ genannt – nicht die tageweit
      durchlaufenden „Unbekannt 68“. Angelernte Namen bleiben stehen. */
   const GM_FARBEN = ['#007BA9', '#0b8e8a', '#8a6d1f', '#8e4a9e', '#b5532a', '#2f7d32', '#355fb0', '#9e2a5b'];
+  /* Feste Teamfarben, gleich wie im Dashboard – dieselbe Person überall gleich. */
+  const GS_TEAM = { Mathias: '#007BA9', Bettina: '#2E7D32', Sylvia: '#8E24AA', Haval: '#E07A00' };
   let gmOffen = null, gmSuche = '', gmFilter = '', gmRichtung = 'neu';
   try { const r = localStorage.getItem('eni_gm_richtung'); if (r === 'neu' || r === 'alt') gmRichtung = r; } catch (_) {}
 
@@ -3331,7 +3333,7 @@ const APP = (() => {
       const s = e.sprecher || '';
       if (!(s in m)) {
         const unbek = !s || /^Unbekannt\b/.test(s);
-        m[s] = { farbe: GM_FARBEN[n % GM_FARBEN.length],
+        m[s] = { farbe: (!unbek && GS_TEAM[s]) ? GS_TEAM[s] : GM_FARBEN[n % GM_FARBEN.length],
                  label: unbek ? 'Sprecher ' + String.fromCharCode(65 + (n % 26)) : s };
         n++;
       }
