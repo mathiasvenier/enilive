@@ -1,6 +1,6 @@
 {
-  "name": "Gesprächsrekorder · Enilive Station Venier",
-  "short_name": "Rekorder",
+  "name": "enilive dashboard rec",
+  "short_name": "eni rec",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
