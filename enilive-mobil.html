@@ -261,6 +261,7 @@ body{
 
 /* ---- Gespräche --------------------------------------- */
 .gm-nav{display:flex;align-items:center;gap:8px;margin-bottom:11px}
+.gm-neu{float:right;background:#eef4f7;border:1px solid #c6d6de;color:var(--eni);border-radius:7px;width:30px;height:26px;font-size:14px;font-family:inherit;margin-top:-4px}
 .gm-nav button{background:#eef4f7;border:1px solid #c6d6de;color:var(--eni);
   width:38px;height:38px;border-radius:10px;font-size:18px;font-family:inherit}
 .gm-nav select{flex:1;font:inherit;font-size:14px;padding:8px;border:1px solid #c8d0d4;border-radius:9px;background:#fff;color:var(--t1)}
@@ -2866,7 +2867,7 @@ const GESPRM = (() => {
    6.21.0; auf dem Telefon fehlte sie, und dann muss man raten, welche
    Fassung gerade läuft – das ist bei der Fehlersuche schon einmal
    passiert. */
-const VERSION = '2.6.0';
+const VERSION = '2.6.1';
 
 const APP = (() => {
   const DS  = ['Mo','Di','Mi','Do','Fr','Sa','So'];
@@ -3355,7 +3356,7 @@ const APP = (() => {
       return `<div class="gm-g">${kopf}${zeilen}</div>`;
     }).join('') : '<div class="leer">An diesem Tag nichts aufgezeichnet.</div>';
 
-    return `<div id="buehne"><div class="karte"><div class="kt">Gespräche</div>${nav}${liste}</div></div>`;
+    return `<div id="buehne"><div class="karte"><div class="kt">Gespräche<button class="gm-neu" onclick="APP.gesprNeu()" title="Aktualisieren">↻</button></div>${nav}${liste}</div></div>`;
   }
 
   /* ---- Aufbau -------------------------------------------- */
@@ -3455,10 +3456,14 @@ const APP = (() => {
       /* Der Tag wechselt, während die Seite offen liegt – und mit ihm,
          was fällig ist. Einmal pro Minute reicht dafür. */
       setInterval(bauen, 60000);
+      /* Gespräche laufend aktualisieren, solange die Ansicht offen ist –
+         sonst bliebe sie auf dem Stand vom Öffnen stehen. */
+      setInterval(() => { if (aktiv === 'gespr' && !document.hidden) GESPRM.laden(); }, 30000);
     },
 
-    zeige(id) { aktiv = id; window.scrollTo(0, 0); bauen(); },
+    zeige(id) { aktiv = id; window.scrollTo(0, 0); if (id === 'gespr') GESPRM.laden(); bauen(); },
     gesprTag(d) { if (d) { gmOffen = null; GESPRM.zuTag(d); } },
+    gesprNeu() { GESPRM.laden(); },
     gesprAuf(id) { gmOffen = (gmOffen === id ? null : id); bauen(); },
     gesprTon(id) { GESPRM.tonHolen(id); },
     wachsen(el) { hoehe(el); },
