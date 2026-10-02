@@ -260,25 +260,35 @@ body{
   background:#e8590c;color:#fff;font:700 15.5px 'Montserrat',sans-serif}
 
 /* ---- Gespräche --------------------------------------- */
-.gm-nav{display:flex;align-items:center;gap:8px;margin-bottom:11px}
-.gm-neu{float:right;background:#eef4f7;border:1px solid #c6d6de;color:var(--eni);border-radius:7px;width:30px;height:26px;font-size:14px;font-family:inherit;margin-top:-4px}
+.gm-nav{display:flex;align-items:center;gap:8px;margin-bottom:9px}
 .gm-nav button{background:#eef4f7;border:1px solid #c6d6de;color:var(--eni);
   width:38px;height:38px;border-radius:10px;font-size:18px;font-family:inherit}
 .gm-nav select{flex:1;font:inherit;font-size:14px;padding:8px;border:1px solid #c8d0d4;border-radius:9px;background:#fff;color:var(--t1)}
+.gm-werk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:11px}
+.gm-such{flex:1 1 150px;min-width:0;font:inherit;font-size:14px;padding:8px 10px;border:1px solid #c8d0d4;border-radius:9px;background:#fff;color:var(--t1)}
+.gm-fil{font:inherit;font-size:13px;padding:8px;border:1px solid #c8d0d4;border-radius:9px;background:#fff;color:var(--t1);max-width:46%}
+.gm-sort{background:#eef4f7;border:1px solid #c6d6de;color:var(--eni);border-radius:9px;padding:8px 10px;font:inherit;font-size:12.5px;font-weight:600;white-space:nowrap}
+.gm-neu{background:#eef4f7;border:1px solid #c6d6de;color:var(--eni);border-radius:9px;width:34px;height:30px;font-size:15px;font-family:inherit;float:right;margin-top:-4px}
 .gm-g{border:1px solid #e4ebee;border-radius:11px;margin-bottom:8px;overflow:hidden}
-.gm-k{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:10px 12px;background:#f7fafb;cursor:pointer}
+.gm-k{display:flex;gap:9px;align-items:center;flex-wrap:wrap;padding:9px 12px;background:#f7fafb;cursor:pointer}
 .gm-k b{font-size:14px;font-variant-numeric:tabular-nums}
-.gm-sp{display:flex;gap:4px;flex-wrap:wrap;margin-left:auto}
-.gm-s{font-size:11px;font-weight:700;color:#fff;border-radius:20px;padding:2px 8px}
-.gm-z{padding:7px 12px;border-top:1px solid #f2f5f6;display:grid;grid-template-columns:50px 1fr;gap:3px 9px}
-.gm-zt{font-size:12px;color:var(--tl);font-variant-numeric:tabular-nums}
-.gm-sn{font-size:12.5px;font-weight:700}
-.gm-tx{grid-column:2;font-size:14.5px;line-height:1.45}
-.gm-ton{grid-column:2;margin-top:3px}
-.gm-ton button{font-size:12.5px;font-weight:600;color:var(--eni);background:#eef4f7;
-  border:1px solid #c6d6de;border-radius:7px;padding:4px 11px;font-family:inherit}
-.gm-ton audio{width:100%;max-width:280px;height:34px;margin-top:3px}
-.gm-ton .warte{font-size:12.5px;color:var(--t3)}
+.gm-k .anz{font-size:11.5px;color:var(--t3)}
+.gm-dots{display:flex;gap:3px;margin-left:auto}
+.gm-dot{width:11px;height:11px;border-radius:50%}
+.gm-z{padding:5px 12px;border-top:1px solid #f2f5f6;display:grid;
+  grid-template-columns:58px 11px 1fr auto;gap:2px 8px;align-items:baseline}
+.gm-zt{font-size:11.5px;color:var(--tl);font-variant-numeric:tabular-nums}
+.gm-pkt{width:10px;height:10px;border-radius:50%;align-self:center}
+.gm-tx{font-size:14px;line-height:1.4;min-width:0;overflow-wrap:anywhere}
+.gm-tx mark{background:#ffe9a8;color:inherit;border-radius:3px;padding:0 1px}
+.gm-ton-s{border:none;background:none;color:var(--eni);cursor:pointer;font-size:14px;padding:0 2px;align-self:center}
+.gm-ton-s.warte{color:var(--t3);font-size:11px;cursor:default}
+.gm-audio{grid-column:1 / -1;margin-top:3px}
+.gm-audio audio{width:100%;height:34px}
+.gm-leg{display:flex;gap:10px;flex-wrap:wrap;padding:7px 12px;border-top:1px solid #f2f5f6;font-size:11.5px;color:var(--t2)}
+.gm-leg span{display:inline-flex;align-items:center;gap:4px}
+.gm-leg i{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.gm-keine{font-size:13.5px;color:var(--t3);padding:10px 2px;text-align:center}
 </style>
 </head>
 <body>
@@ -2867,7 +2877,7 @@ const GESPRM = (() => {
    6.21.0; auf dem Telefon fehlte sie, und dann muss man raten, welche
    Fassung gerade läuft – das ist bei der Fehlersuche schon einmal
    passiert. */
-const VERSION = '2.6.1';
+const VERSION = '2.7.0';
 
 const APP = (() => {
   const DS  = ['Mo','Di','Mi','Do','Fr','Sa','So'];
@@ -3307,12 +3317,80 @@ const APP = (() => {
   }
 
   /* ---- Gespräche ----------------------------------------- */
-  function gmFarbe(name) {
-    if (!name) return '#7a8890';
-    let h = 0; for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
-    return 'hsl(' + h + ',55%,42%)';
+  /* Feste Farbreihe. Sprecher werden JE GESPRÄCH der Reihe nach eingefärbt
+     und, wenn unbekannt, „Sprecher A/B/C“ genannt – nicht die tageweit
+     durchlaufenden „Unbekannt 68“. Angelernte Namen bleiben stehen. */
+  const GM_FARBEN = ['#007BA9', '#0b8e8a', '#8a6d1f', '#8e4a9e', '#b5532a', '#2f7d32', '#355fb0', '#9e2a5b'];
+  let gmOffen = null, gmSuche = '', gmFilter = '', gmRichtung = 'neu';
+  try { const r = localStorage.getItem('eni_gm_richtung'); if (r === 'neu' || r === 'alt') gmRichtung = r; } catch (_) {}
+
+  /** Sprecher eines Gesprächs auf Farbe und Anzeigenamen abbilden. */
+  function gmMap(g) {
+    const m = {}; let n = 0;
+    for (const e of (g.eintraege || [])) {
+      const s = e.sprecher || '';
+      if (!(s in m)) {
+        const unbek = !s || /^Unbekannt\b/.test(s);
+        m[s] = { farbe: GM_FARBEN[n % GM_FARBEN.length],
+                 label: unbek ? 'Sprecher ' + String.fromCharCode(65 + (n % 26)) : s };
+        n++;
+      }
+    }
+    return m;
   }
-  let gmOffen = null;   // welches Gespräch ist aufgeklappt
+  function gmMark(text) {
+    const t = esc(text || '');
+    if (!gmSuche) return t;
+    const q = esc(gmSuche).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    try { return t.replace(new RegExp('(' + q + ')', 'gi'), '<mark>$1</mark>'); } catch (_) { return t; }
+  }
+  function gmTrifft(e, m) {
+    if (gmFilter && e.sprecher !== gmFilter) return false;
+    if (gmSuche) {
+      const q = gmSuche.toLowerCase();
+      const lbl = ((m[e.sprecher] || {}).label || '').toLowerCase();
+      if (!(e.text || '').toLowerCase().includes(q) && !lbl.includes(q)) return false;
+    }
+    return true;
+  }
+
+  /** Nur die Liste der Gespräche – getrennt, damit die Suche beim Tippen
+      nicht den Fokus verliert (nur dieser Teil wird neu gezeichnet). */
+  function gmListeHTML(gespr) {
+    const suchen = !!(gmSuche || gmFilter);
+    const arr = gmRichtung === 'neu' ? gespr.slice().reverse() : gespr.slice();
+    const karten = arr.map(g => {
+      const m = gmMap(g);
+      let eintr = g.eintraege || [];
+      if (suchen) eintr = eintr.filter(e => gmTrifft(e, m));
+      if (suchen && !eintr.length) return '';
+      const offen = suchen || gmOffen === g.id;
+      const dots = Object.values(m).slice(0, 7).map(x => `<span class="gm-dot" style="background:${x.farbe}"></span>`).join('');
+      const kopf = `<div class="gm-k" onclick="APP.gesprAuf('${esc(g.id)}')">
+        <b>${esc((g.eintraege[0] || {}).zeit || '')}</b>
+        <span class="anz">${(g.eintraege || []).length} Beiträge</span>
+        <span class="gm-dots">${dots}</span></div>`;
+      if (!offen) return `<div class="gm-g">${kopf}</div>`;
+      const zeilen = eintr.map(e => {
+        const f = (m[e.sprecher] || {}).farbe || '#7a8890';
+        const t = e.id ? GESPRM.ton(e.id) : null;
+        let tonZelle = '<span></span>', audio = '';
+        if (e.ton && e.id) {
+          if (t && t.status === 'da') { tonZelle = '<span></span>'; audio = `<div class="gm-audio"><audio controls src="${t.url}"></audio></div>`; }
+          else if (t && t.status === 'warte') tonZelle = `<span class="gm-ton-s warte" title="Ton wird geholt">⏳</span>`;
+          else if (t && t.status === 'fehler') tonZelle = `<button class="gm-ton-s" title="Nochmal" onclick="APP.gesprTon('${esc(e.id)}')">↻</button>`;
+          else tonZelle = `<button class="gm-ton-s" title="Ton holen" onclick="APP.gesprTon('${esc(e.id)}')">🔊</button>`;
+        }
+        return `<div class="gm-z"><span class="gm-zt">${esc(e.zeit || '')}</span>
+          <span class="gm-pkt" style="background:${f}"></span>
+          <span class="gm-tx">${gmMark(e.text)}</span>${tonZelle}${audio}</div>`;
+      }).join('');
+      const leg = `<div class="gm-leg">${Object.values(m).map(x =>
+        `<span><i style="background:${x.farbe}"></i>${esc(x.label)}</span>`).join('')}</div>`;
+      return `<div class="gm-g">${kopf}${zeilen}${leg}</div>`;
+    }).join('');
+    return karten || '<div class="gm-keine">Keine Treffer.</div>';
+  }
 
   function seiteGespr() {
     if (DRIVE.zustand() === 'offline')
@@ -3333,30 +3411,24 @@ const APP = (() => {
       <button onclick="APP.gesprTag('${(tage[i - 1] || {}).datum || ''}')"${i <= 0 ? ' disabled' : ''}>›</button></div>`;
 
     const gespr = (doc && doc.gespraeche) || [];
-    if (gmOffen === null && gespr.length) gmOffen = gespr[0].id;
-    const liste = gespr.length ? gespr.map(g => {
-      const sp = (g.sprecher || []);
-      const kopf = `<div class="gm-k" onclick="APP.gesprAuf('${esc(g.id)}')">
-        <b>${esc((g.eintraege[0] || {}).zeit || '')}</b>
-        <span class="gm-sp">${sp.map(s => `<span class="gm-s" style="background:${gmFarbe(s)}">${esc(s)}</span>`).join('')}</span></div>`;
-      if (gmOffen !== g.id) return `<div class="gm-g">${kopf}</div>`;
-      const zeilen = (g.eintraege || []).map(e => {
-        const t = e.id ? GESPRM.ton(e.id) : null;
-        let ton = '';
-        if (e.ton && e.id) {
-          if (t && t.status === 'da') ton = `<div class="gm-ton"><audio controls src="${t.url}"></audio></div>`;
-          else if (t && t.status === 'warte') ton = `<div class="gm-ton"><span class="warte">Ton wird vom Kassen-PC geholt … (kann ein paar Minuten dauern)</span></div>`;
-          else if (t && t.status === 'fehler') ton = `<div class="gm-ton"><span class="warte">Ton nicht verfügbar${t.text ? ' (' + esc(t.text) + ')' : ''}.</span> <button onclick="APP.gesprTon('${esc(e.id)}')">Nochmal</button></div>`;
-          else ton = `<div class="gm-ton"><button onclick="APP.gesprTon('${esc(e.id)}')">Ton holen</button></div>`;
-        }
-        return `<div class="gm-z"><span class="gm-zt">${esc(e.zeit || '')}</span>
-          <span class="gm-sn" style="color:${gmFarbe(e.sprecher)}">${esc(e.sprecher || '–')}</span>
-          <span class="gm-tx">${esc(e.text || '')}</span>${ton}</div>`;
-      }).join('');
-      return `<div class="gm-g">${kopf}${zeilen}</div>`;
-    }).join('') : '<div class="leer">An diesem Tag nichts aufgezeichnet.</div>';
+    if (gmOffen === null && gespr.length) gmOffen = (gmRichtung === 'neu' ? gespr[gespr.length - 1] : gespr[0]).id;
 
-    return `<div id="buehne"><div class="karte"><div class="kt">Gespräche<button class="gm-neu" onclick="APP.gesprNeu()" title="Aktualisieren">↻</button></div>${nav}${liste}</div></div>`;
+    /* Angelernte Namen des Tages für den Filter (unbekannte Nummern taugen
+       nicht, weil die Zuordnung nur je Gespräch gilt). */
+    const namen = new Set();
+    for (const g of gespr) for (const e of (g.eintraege || []))
+      if (e.sprecher && !/^Unbekannt\b/.test(e.sprecher)) namen.add(e.sprecher);
+    const filterOpt = ['<option value="">Alle Sprecher</option>'].concat(
+      [...namen].sort().map(nm => `<option value="${esc(nm)}"${nm === gmFilter ? ' selected' : ''}>${esc(nm)}</option>`)).join('');
+    const werk = `<div class="gm-werk">
+      <input class="gm-such" type="search" placeholder="Suchen (Wort, Name) …" value="${esc(gmSuche)}" oninput="APP.gesprSuche(this.value)">
+      ${namen.size ? `<select class="gm-fil" onchange="APP.gesprFilter(this.value)">${filterOpt}</select>` : ''}
+      <button class="gm-sort" onclick="APP.gesprSort()">${gmRichtung === 'neu' ? '↓ Neueste oben' : '↑ Älteste oben'}</button></div>`;
+
+    return `<div id="buehne"><div class="karte">
+      <div class="kt">Gespräche<button class="gm-neu" onclick="APP.gesprNeu()" title="Aktualisieren">↻</button></div>
+      ${nav}${werk}
+      <div id="gm-liste">${gmListeHTML(gespr)}</div></div></div>`;
   }
 
   /* ---- Aufbau -------------------------------------------- */
@@ -3462,10 +3534,22 @@ const APP = (() => {
     },
 
     zeige(id) { aktiv = id; window.scrollTo(0, 0); if (id === 'gespr') GESPRM.laden(); bauen(); },
-    gesprTag(d) { if (d) { gmOffen = null; GESPRM.zuTag(d); } },
+    gesprTag(d) { if (d) { gmOffen = null; gmSuche = ''; gmFilter = ''; GESPRM.zuTag(d); } },
     gesprNeu() { GESPRM.laden(); },
     gesprAuf(id) { gmOffen = (gmOffen === id ? null : id); bauen(); },
     gesprTon(id) { GESPRM.tonHolen(id); },
+    /* Suche frischt nur die Liste auf, damit das Feld den Fokus behält. */
+    gesprSuche(v) {
+      gmSuche = String(v || '');
+      const l = document.getElementById('gm-liste');
+      if (l) l.innerHTML = gmListeHTML(((GESPRM.doc() || {}).gespraeche) || []);
+    },
+    gesprFilter(v) { gmFilter = String(v || ''); bauen(); },
+    gesprSort() {
+      gmRichtung = (gmRichtung === 'neu' ? 'alt' : 'neu');
+      try { localStorage.setItem('eni_gm_richtung', gmRichtung); } catch (_) {}
+      gmOffen = null; bauen();
+    },
     wachsen(el) { hoehe(el); },
     verbinden() { DRIVE.neuVerbinden(); },
     preiseJetzt() { MFEED.abrufen(true); bauen(); },
