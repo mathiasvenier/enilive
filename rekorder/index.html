@@ -66,6 +66,10 @@ button{font-family:inherit;cursor:pointer}
 .st .n{font-size:12.5px;color:var(--t3);margin-right:auto}
 .klein{background:var(--eni);color:#fff;border:none;border-radius:7px;padding:5px 11px;font-weight:600;font-size:12.5px}
 .klein.grau{background:#eef2f5;color:var(--t2)}
+.klein:disabled{opacity:.5}
+.sim{font-size:10.5px;font-weight:600;color:var(--tl);font-variant-numeric:tabular-nums}
+.probe{background:#eef7fb;border:1px solid #c6e3ef;border-radius:9px;padding:8px 11px;font-size:13px;color:var(--t2);margin-bottom:10px}
+.probe b{color:var(--eni)}
 .einst label{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13.5px;
   padding:6px 0;border-bottom:1px solid #f0f4f6;color:var(--t2);font-weight:600}
 .einst input[type=number]{width:84px;padding:5px 8px;border:1px solid #c8d0d4;border-radius:7px;font:inherit;text-align:right}
@@ -115,13 +119,13 @@ body.tarn{cursor:default}
     </div>
 
     <div class="karte">
-      <div class="ct">Heute erkannt</div>
+      <div class="ct">Stimmen anlernen</div>
       <div id="unbekannt"></div>
       <div class="ct" style="margin-top:16px">Angelernte Stimmen</div>
       <div id="stimmen"></div>
-      <p class="hin">Eine Stimme benennen, und sie wird ab dann wiedererkannt. Ein falsch
-        zugeordneter Eintrag lässt sich über den Namen davor korrigieren – das lernt die
-        Stimme bewusst nicht mit.</p>
+      <p class="hin">„Probe" drücken, dann deutlich sprechen – jeder erkannte Satz wird als Muster
+        übernommen. Mehrere Proben je Person machen die Erkennung sicherer. Erkannt werden nur
+        angelernte Stimmen; alle anderen heißen „Kunde".</p>
     </div>
 
     <div class="karte einst">
@@ -130,8 +134,7 @@ body.tarn{cursor:default}
       <label>Rauschunterdrückung <input type="checkbox" data-e="rauschfilter"></label>
       <label>Mindestpegel (dBFS) <input type="number" step="1" min="-80" max="-20" data-e="minPegel"></label>
       <label>Neues Gespräch nach (s Stille) <input type="number" step="5" min="10" max="600" data-e="pause"></label>
-      <label>Bekannte Stimme ab <input type="number" step="0.01" min="0.2" max="0.95" data-e="schwelleBekannt"></label>
-      <label>Gleiche unbekannte ab <input type="number" step="0.01" min="0.2" max="0.95" data-e="schwelleUnbekannt"></label>
+      <label>Als Team erkennen ab <input type="number" step="0.01" min="0.2" max="0.95" data-e="schwelleBekannt"></label>
       <label>Audio aufheben (Tage) <input type="number" step="1" min="1" max="60" data-e="aufbewahrung"></label>
       <label>Rechenkerne (0 = auto) <input type="number" step="1" min="0" max="16" data-e="threads"></label>
       <p class="hin">Mindestpegel: Was leiser ankommt, wird gar nicht erst verschriftet –

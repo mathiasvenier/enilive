@@ -20,10 +20,10 @@ let E = {
   start: 0.5,          // ab dieser Wahrscheinlichkeit Sprache
   ende: 0.35,          // darunter Stille
   startFrames: 3,      // ~100 ms Sprache, bevor ein Abschnitt beginnt
-  nachlauf: 25,        // ~800 ms Stille, bis er endet
+  nachlauf: 56,        // ~1,8 s Stille, bis er endet – bündelt zusammenhängende Sätze
   vorlauf: 10,         // ~320 ms vor dem ersten Wort mitnehmen
   minSprache: 0.5,     // kürzere Abschnitte verwerfen (s)
-  maxDauer: 25,        // länger wird geteilt (s)
+  maxDauer: 28,        // länger wird geteilt (s)
   minPegel: -60        // leiser (dBFS) wird verworfen
 };
 

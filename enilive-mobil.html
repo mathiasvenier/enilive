@@ -276,15 +276,29 @@ body{
 .gm-dots{display:flex;gap:3px;margin-left:auto}
 .gm-dot{width:11px;height:11px;border-radius:50%}
 .gm-z{padding:5px 12px;border-top:1px solid #f2f5f6;display:grid;
-  grid-template-columns:58px 11px 1fr auto;gap:2px 8px;align-items:baseline}
+  grid-template-columns:58px 11px 1fr;gap:2px 8px;align-items:baseline}
 .gm-zt{font-size:11.5px;color:var(--tl);font-variant-numeric:tabular-nums}
 .gm-pkt{width:10px;height:10px;border-radius:50%;align-self:center}
 .gm-tx{font-size:14px;line-height:1.4;min-width:0;overflow-wrap:anywhere}
 .gm-tx mark{background:#ffe9a8;color:inherit;border-radius:3px;padding:0 1px}
-.gm-ton-s{border:none;background:none;color:var(--eni);cursor:pointer;font-size:14px;padding:0 2px;align-self:center}
-.gm-ton-s.warte{color:var(--t3);font-size:11px;cursor:default}
-.gm-audio{grid-column:1 / -1;margin-top:3px}
+.gm-sim{font-size:10px;font-weight:600;color:var(--tl);font-variant-numeric:tabular-nums}
+.gm-audio{margin:4px 0}
 .gm-audio audio{width:100%;height:34px}
+.gm-stat{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;border-radius:9px;padding:7px 11px;margin-bottom:10px}
+.gm-stat.ok{background:#eef7f0;border:1px solid #cfe9d6;color:#2e7d32}
+.gm-stat.warn{background:#fff1f0;border:1px solid #f3c9c6;color:#c62828}
+.gm-reload{margin-left:auto;background:#fff;border:1px solid #c6d6de;color:var(--eni);border-radius:8px;padding:5px 9px;font:inherit;font-size:12px;font-weight:600}
+.gm-steuer{padding:7px 12px;border-top:1px solid #f2f5f6;display:flex;flex-direction:column;gap:7px}
+.gm-mini{align-self:flex-start;background:#eef4f7;border:1px solid #c6d6de;color:var(--eni);border-radius:8px;padding:5px 11px;font:inherit;font-size:12.5px;font-weight:600}
+.gm-hint{font-size:12.5px;color:var(--t3)}
+.gm-hint.err{color:#c62828}
+.gm-bewrow{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.gm-bew{background:#f2f5f6;border:1px solid #dde4e8;color:var(--t2);border-radius:20px;padding:4px 11px;font:inherit;font-size:12px}
+.gm-bew.an.b-gut{background:#2e7d32;border-color:#2e7d32;color:#fff}
+.gm-bew.an.b-mittel{background:#E07A00;border-color:#E07A00;color:#fff}
+.gm-bew.an.b-unbrauchbar{background:#c62828;border-color:#c62828;color:#fff}
+.gm-ref{margin-left:auto;background:#f2f5f6;border:1px solid #dde4e8;color:var(--t2);border-radius:20px;padding:4px 11px;font:inherit;font-size:12px}
+.gm-ref.an{background:#fff7e6;border-color:#f0d08a;color:#8a6d1f}
 .gm-leg{display:flex;gap:10px;flex-wrap:wrap;padding:7px 12px;border-top:1px solid #f2f5f6;font-size:11.5px;color:var(--t2)}
 .gm-leg span{display:inline-flex;align-items:center;gap:4px}
 .gm-leg i{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
@@ -2797,6 +2811,7 @@ const GESPRM = (() => {
         .sort((a, b) => b.datum.localeCompare(a.datum));
       if (!tage.find(t => t.datum === tag)) tag = tage.length ? tage[0].datum : '';
       if (tag) await tagLaden(); else doc = null;
+      await nebenLaden();
       geladen = true;
     } catch (e) { fehler = String(e && e.message || e); }
     finally { laedt = false; tell(); }
@@ -2816,50 +2831,97 @@ const GESPRM = (() => {
     tell();
   }
 
-  /** Ton eines Eintrags anfordern und auf die WAV-Datei warten. */
-  async function tonHolen(id) {
-    if (!/^a[0-9a-z]+$/.test(id || '')) return;
-    toene[id] = { status: 'warte' }; tell();
+  /* ---- Status, Bewertung, Referenzen ------------------------- */
+  let status = null, bewertung = {}, referenzen = [];
+
+  async function datei(name) {
+    const o = await ordner();
+    const d = await files("name='" + name + "' and '" + o + "' in parents");
+    if (!d.length) return { id: null, inhalt: null };
+    try { return { id: d[0].id, inhalt: await (await ruf(API + '/files/' + d[0].id + '?alt=media')).json() }; }
+    catch (_) { return { id: d[0].id, inhalt: null }; }
+  }
+  async function schreibe(name, obj) {
+    const o = await ordner();
+    const d = await files("name='" + name + "' and '" + o + "' in parents");
+    if (d.length) {
+      await ruf(UPL + '/files/' + d[0].id + '?uploadType=media', { method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(obj) });
+    } else {
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify({ name, parents: [o], mimeType: 'application/json' })], { type: 'application/json' }));
+      form.append('file', new Blob([JSON.stringify(obj)], { type: 'application/json' }));
+      await ruf(UPL + '/files?uploadType=multipart&fields=id', { method: 'POST', body: form });
+    }
+  }
+
+  async function nebenLaden() {
+    try { status = (await datei('status.json')).inhalt; } catch (_) {}
+    try { bewertung = (await datei('bewertung.json')).inhalt || {}; } catch (_) {}
+    try { referenzen = ((await datei('referenzen.json')).inhalt || {}).gids || []; } catch (_) {}
+  }
+
+  /** Rekorder am Kassen-PC zum Neuladen auffordern (über Drive). */
+  async function neuLaden() {
+    try { await schreibe('befehle.json', { neu_laden: Date.now() }); return true; }
+    catch (_) { return false; }
+  }
+
+  async function setzeBewertung(gid, wert) {
+    bewertung[tag] = bewertung[tag] || {};
+    if (bewertung[tag][gid] === wert) delete bewertung[tag][gid]; else bewertung[tag][gid] = wert;
+    tell();
+    try { await schreibe('bewertung.json', bewertung); } catch (_) {}
+  }
+
+  async function toggleReferenz(gid) {
+    const i = referenzen.indexOf(gid);
+    if (i >= 0) referenzen.splice(i, 1); else referenzen.push(gid);
+    tell();
+    try { await schreibe('referenzen.json', { gids: referenzen, stand: Date.now() }); } catch (_) {}
+  }
+
+  /** Ton eines ganzen Gesprächs anfordern und auf die WAV-Datei warten. */
+  async function tonHolen(gid) {
+    if (!/^g[0-9a-z]+$/.test(gid || '')) return;
+    toene[gid] = { status: 'warte' }; tell();
     try {
       const o = await ordner();
       const af = await files("name='" + ANFRAGEN + "' and '" + o + "' in parents");
       let anf = {}, afId = af.length ? af[0].id : null;
       if (afId) { try { anf = await (await ruf(API + '/files/' + afId + '?alt=media')).json() || {}; } catch (_) {} }
-      anf[id] = { datum: tag, ts: Date.now() };
-      if (afId) {
-        await ruf(UPL + '/files/' + afId + '?uploadType=media', { method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(anf) });
-      } else {
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify({ name: ANFRAGEN, parents: [o], mimeType: 'application/json' })],
-          { type: 'application/json' }));
-        form.append('file', new Blob([JSON.stringify(anf)], { type: 'application/json' }));
-        await ruf(UPL + '/files?uploadType=multipart&fields=id', { method: 'POST', body: form });
-      }
+      anf[gid] = { datum: tag, ts: Date.now() };
+      await schreibe(ANFRAGEN, anf);
       const bis = Date.now() + 6 * 60 * 1000;
       const t = setInterval(async () => {
         try {
           const au = await audioOrdner();
           if (au) {
-            const w = await files("name='" + id + ".wav' and '" + au + "' in parents");
+            const w = await files("name='" + gid + ".wav' and '" + au + "' in parents");
             if (w.length) {
               clearInterval(t);
               const blob = await (await ruf(API + '/files/' + w[0].id + '?alt=media')).blob();
-              toene[id] = { status: 'da', url: URL.createObjectURL(blob) };
+              toene[gid] = { status: 'da', url: URL.createObjectURL(blob) };
               tell(); return;
             }
           }
+          // Hat der Rekorder einen Grund gemeldet? Dann den zeigen.
+          const neu = (await datei(ANFRAGEN)).inhalt || {};
+          if (neu[gid] && neu[gid].fehler) { clearInterval(t); toene[gid] = { status: 'fehler', text: neu[gid].fehler }; tell(); return; }
         } catch (_) {}
-        if (Date.now() > bis) { clearInterval(t); toene[id] = { status: 'fehler', text: 'Zeitüberschreitung' }; tell(); }
+        if (Date.now() > bis) { clearInterval(t); toene[gid] = { status: 'fehler', text: 'Zeitüberschreitung – läuft der Rekorder am Kassen-PC?' }; tell(); }
       }, 8000);
-    } catch (e) { toene[id] = { status: 'fehler', text: String(e && e.message || e) }; tell(); }
+    } catch (e) { toene[gid] = { status: 'fehler', text: String(e && e.message || e) }; tell(); }
   }
 
   return {
-    laden, zuTag, tonHolen,
+    laden, zuTag, tonHolen, nebenLaden, neuLaden, setzeBewertung, toggleReferenz,
     tage: () => tage, tag: () => tag, doc: () => doc,
     fehler: () => fehler, laedt: () => laedt, geladen: () => geladen,
     ton: (id) => toene[id] || null,
+    status: () => status,
+    bewertungVon: (gid) => (bewertung[tag] || {})[gid] || '',
+    istReferenz: (gid) => referenzen.indexOf(gid) >= 0,
     aufAenderung: (f) => hoerer.push(f)
   };
 })();
@@ -2877,7 +2939,7 @@ const GESPRM = (() => {
    6.21.0; auf dem Telefon fehlte sie, und dann muss man raten, welche
    Fassung gerade läuft – das ist bei der Fehlersuche schon einmal
    passiert. */
-const VERSION = '2.7.1';
+const VERSION = '2.8.0';
 
 const APP = (() => {
   const DS  = ['Mo','Di','Mi','Do','Fr','Sa','So'];
@@ -3332,10 +3394,10 @@ const APP = (() => {
     for (const e of (g.eintraege || [])) {
       const s = e.sprecher || '';
       if (!(s in m)) {
-        const unbek = !s || /^Unbekannt\b/.test(s);
-        m[s] = { farbe: (!unbek && GS_TEAM[s]) ? GS_TEAM[s] : GM_FARBEN[n % GM_FARBEN.length],
-                 label: unbek ? 'Sprecher ' + String.fromCharCode(65 + (n % 26)) : s };
-        n++;
+        const unbek = !s || s === 'Kunde' || /^Unbekannt\b/.test(s);
+        m[s] = { farbe: unbek ? '#7a8890' : (GS_TEAM[s] || GM_FARBEN[n % GM_FARBEN.length]),
+                 label: !s || /^Unbekannt\b/.test(s) ? 'Kunde' : s };
+        if (!unbek) n++;
       }
     }
     return m;
@@ -3375,21 +3437,29 @@ const APP = (() => {
       if (!offen) return `<div class="gm-g">${kopf}</div>`;
       const zeilen = eintr.map(e => {
         const f = (m[e.sprecher] || {}).farbe || '#7a8890';
-        const t = e.id ? GESPRM.ton(e.id) : null;
-        let tonZelle = '<span></span>', audio = '';
-        if (e.ton && e.id) {
-          if (t && t.status === 'da') { tonZelle = '<span></span>'; audio = `<div class="gm-audio"><audio controls src="${t.url}"></audio></div>`; }
-          else if (t && t.status === 'warte') tonZelle = `<span class="gm-ton-s warte" title="Ton wird geholt">⏳</span>`;
-          else if (t && t.status === 'fehler') tonZelle = `<button class="gm-ton-s" title="Nochmal" onclick="APP.gesprTon('${esc(e.id)}')">↻</button>`;
-          else tonZelle = `<button class="gm-ton-s" title="Ton holen" onclick="APP.gesprTon('${esc(e.id)}')">🔊</button>`;
-        }
         return `<div class="gm-z"><span class="gm-zt">${esc(e.zeit || '')}</span>
           <span class="gm-pkt" style="background:${f}"></span>
-          <span class="gm-tx">${gmMark(e.text)}</span>${tonZelle}${audio}</div>`;
+          <span class="gm-tx">${gmMark(e.text)}${e.sim == null ? '' : ' <span class="gm-sim">' + (+e.sim).toFixed(2) + '</span>'}</span></div>`;
       }).join('');
       const leg = `<div class="gm-leg">${Object.values(m).map(x =>
         `<span><i style="background:${x.farbe}"></i>${esc(x.label)}</span>`).join('')}</div>`;
-      return `<div class="gm-g">${kopf}${zeilen}${leg}</div>`;
+
+      /* Steuerung je Gespräch: Ton holen, Bewertung, Referenz. */
+      const t = GESPRM.ton(g.id);
+      let tonBar;
+      if (t && t.status === 'da') tonBar = `<div class="gm-audio"><audio controls src="${t.url}"></audio></div>`;
+      else if (t && t.status === 'warte') tonBar = `<span class="gm-hint">Ton wird vom Kassen-PC geholt … (kann ein paar Minuten dauern)</span>`;
+      else if (t && t.status === 'fehler') tonBar = `<span class="gm-hint err">Ton: ${esc(t.text || 'nicht verfügbar')}</span> <button class="gm-mini" onclick="APP.gesprTon('${esc(g.id)}')">nochmal</button>`;
+      else if (g.ton) tonBar = `<button class="gm-mini" onclick="APP.gesprTon('${esc(g.id)}')">🔊 Ton holen</button>`;
+      else tonBar = `<span class="gm-hint">kein Ton mehr vorhanden</span>`;
+      const bew = GESPRM.bewertungVon(g.id);
+      const bewBar = ['gut', 'mittel', 'unbrauchbar'].map(w =>
+        `<button class="gm-bew b-${w}${bew === w ? ' an' : ''}" onclick="APP.gesprBewerten('${esc(g.id)}','${w}')">${w}</button>`).join('');
+      const ref = GESPRM.istReferenz(g.id);
+      const refBtn = `<button class="gm-ref${ref ? ' an' : ''}" onclick="APP.gesprReferenz('${esc(g.id)}')" title="Audio über 10 Tage hinaus behalten">${ref ? '★ Referenz' : '☆ Referenz'}</button>`;
+      const steuer = `<div class="gm-steuer">${tonBar}<div class="gm-bewrow">${bewBar}${refBtn}</div></div>`;
+
+      return `<div class="gm-g">${kopf}${steuer}${zeilen}${leg}</div>`;
     }).join('');
     return karten || '<div class="gm-keine">Keine Treffer.</div>';
   }
@@ -3419,7 +3489,7 @@ const APP = (() => {
        nicht, weil die Zuordnung nur je Gespräch gilt). */
     const namen = new Set();
     for (const g of gespr) for (const e of (g.eintraege || []))
-      if (e.sprecher && !/^Unbekannt\b/.test(e.sprecher)) namen.add(e.sprecher);
+      if (e.sprecher && e.sprecher !== 'Kunde' && !/^Unbekannt\b/.test(e.sprecher)) namen.add(e.sprecher);
     const filterOpt = ['<option value="">Alle Sprecher</option>'].concat(
       [...namen].sort().map(nm => `<option value="${esc(nm)}"${nm === gmFilter ? ' selected' : ''}>${esc(nm)}</option>`)).join('');
     const werk = `<div class="gm-werk">
@@ -3429,8 +3499,30 @@ const APP = (() => {
 
     return `<div id="buehne"><div class="karte">
       <div class="kt">Gespräche<button class="gm-neu" onclick="APP.gesprNeu()" title="Aktualisieren">↻</button></div>
+      ${gmStatusHTML()}
       ${nav}${werk}
       <div id="gm-liste">${gmListeHTML(gespr)}</div></div></div>`;
+  }
+
+  /* Echter Zustand des Rekorders aus status.json. Warnt deutlich, wenn
+     er länger stumm ist oder die Brücke fehlt. */
+  function gmStatusHTML() {
+    const s = GESPRM.status();
+    const uhr = ts => new Date(ts).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' });
+    const knopf = '<button class="gm-reload" onclick="APP.gesprReload()">Rekorder neu laden</button>';
+    if (!s) return `<div class="gm-stat warn">Kein Lebenszeichen vom Rekorder. ${knopf}</div>`;
+    const alt = Date.now() - (s.stand || 0);
+    const schlecht = alt > 15 * 60000 || !s.bruecke_ok;
+    if (schlecht) {
+      const grund = !s.bruecke_ok ? 'Brücke zum Dashboard fehlt' : 'seit ' + uhr(s.stand) + ' kein Lebenszeichen';
+      return `<div class="gm-stat warn">⚠ Rekorder meldet sich nicht richtig – ${esc(grund)}. ${knopf}</div>`;
+    }
+    const teile = ['● läuft'];
+    if (!s.aufnahme) teile.push('Aufnahme aus');
+    if (s.warteschlange) teile.push(s.warteschlange + ' in Warteschlange');
+    if (s.tempo) teile.push('Tempo ×' + s.tempo);
+    if (s.letzter_upload) teile.push('Drive ' + uhr(s.letzter_upload));
+    return `<div class="gm-stat ok">${esc(teile.join(' · '))} ${knopf}</div>`;
   }
 
   /* ---- Aufbau -------------------------------------------- */
@@ -3540,6 +3632,13 @@ const APP = (() => {
     gesprNeu() { GESPRM.laden(); },
     gesprAuf(id) { gmOffen = (gmOffen === id ? null : id); bauen(); },
     gesprTon(id) { GESPRM.tonHolen(id); },
+    gesprBewerten(gid, w) { GESPRM.setzeBewertung(gid, w); },
+    gesprReferenz(gid) { GESPRM.toggleReferenz(gid); },
+    async gesprReload() {
+      const ok = await GESPRM.neuLaden();
+      alert(ok ? 'Der Rekorder am Kassen-PC wird neu geladen. Das dauert einen Moment.'
+               : 'Konnte den Befehl nicht ablegen – bist du mit Drive verbunden?');
+    },
     /* Suche frischt nur die Liste auf, damit das Feld den Fokus behält. */
     gesprSuche(v) {
       gmSuche = String(v || '');
